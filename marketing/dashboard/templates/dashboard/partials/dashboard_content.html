@@ -297,26 +297,17 @@ function toggleDrill(id, url) {
     if (v == null) return '—';
     return v.toLocaleString(undefined, {maximumFractionDigits: 0});
   }
-  function tipHtml(dayLabel, curV, cmpV, formatter, invertDelta) {
-    var fc = formatter || fmtDollar;
-    var deltaStr = '—';
+  function calcDelta(curV, cmpV) {
     if (curV != null && cmpV != null && cmpV !== 0) {
-      var d = (curV - cmpV) / Math.abs(cmpV) * 100;
-      if (invertDelta) d = -d;
-      var sign = d > 0 ? '+' : '';
-      var color = d > 0.5 ? '#1a8a38' : d < -0.5 ? '#c41e1e' : '#6B7D94';
-      deltaStr = '<b style="color:' + color + '">' + sign + d.toFixed(1) + '%</b>';
+      return (curV - cmpV) / Math.abs(cmpV);
     }
-    return '<div style="padding:8px 10px;font-size:12px;line-height:1.6;min-width:120px">'
-      + '<strong>' + dayLabel + '</strong><br>'
-      + '<b>' + fc(curV) + '</b><br>'
-      + fc(cmpV) + '<br>'
-      + deltaStr
-      + '</div>';
+    return null;
   }
-
-  var TIP = {type: 'string', role: 'tooltip', p: {html: true}};
-  var EMPTY_TIP = ' ';
+  var deltaFmt = null;
+  function getDeltaFmt() {
+    if (!deltaFmt) deltaFmt = new google.visualization.NumberFormat({pattern: "+#,##0.0%;-#,##0.0%"});
+    return deltaFmt;
+  }
 
   function drawTrend(elId, metric, label, color, cmpColor, formatter, invertDelta, vAxisFmt) {
     var el = document.getElementById(elId);
@@ -325,9 +316,8 @@ function toggleDrill(id, url) {
     var dt = new google.visualization.DataTable();
     dt.addColumn('string', 'Day');
     dt.addColumn('number', 'Current');
-    dt.addColumn(TIP);
     dt.addColumn('number', 'Compare');
-    dt.addColumn(TIP);
+    dt.addColumn('number', 'Delta');
 
     var cur = trend.current || [];
     var cmp = trend.compare || [];
@@ -337,25 +327,28 @@ function toggleDrill(id, url) {
       var dayLabel = (cur[i] || cmp[i] || {}).day || '';
       var curV = cur[i] ? cur[i][metric] : null;
       var cmpV = cmp[i] ? cmp[i][metric] : null;
-      var tip = tipHtml(dayLabel, curV, cmpV, formatter, invertDelta);
-      dt.addRow([dayLabel, curV, tip, cmpV, EMPTY_TIP]);
+      dt.addRow([dayLabel, curV, cmpV, calcDelta(curV, cmpV)]);
     }
+    getDeltaFmt().format(dt, 3);
 
     var opts = {
       curveType: 'function',
-      tooltip: {isHtml: true},
       series: {
         0: {color: color, lineWidth: 2},
-        1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1}
+        1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1},
+        2: {lineWidth: 0, pointSize: 0, visibleInLegend: false, targetAxisIndex: 1}
+      },
+      vAxes: {
+        0: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
+        1: {textPosition: 'none', gridlines: {count: 0}}
       },
       chartArea: {left: 55, right: 15, height: '70%'},
       backgroundColor: 'transparent',
       hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
-      vAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
       legend: {position: 'top', textStyle: {color: '#313E4F'}},
       focusTarget: 'category'
     };
-    if (vAxisFmt) opts.vAxis.format = vAxisFmt;
+    if (vAxisFmt) opts.vAxes[0].format = vAxisFmt;
     new google.visualization.LineChart(el).draw(dt, opts);
   }
 
@@ -366,9 +359,8 @@ function toggleDrill(id, url) {
     var dt = new google.visualization.DataTable();
     dt.addColumn('string', 'Day');
     dt.addColumn('number', 'Current');
-    dt.addColumn(TIP);
     dt.addColumn('number', 'Compare');
-    dt.addColumn(TIP);
+    dt.addColumn('number', 'Delta');
 
     var hasBounds = bounds && bounds.lower != null && bounds.upper != null;
     if (hasBounds) {
@@ -387,13 +379,13 @@ function toggleDrill(id, url) {
       var cmpV = cmp[i] ? computeFn(cmp[i]) : null;
       if (curV != null) allVals.push(curV);
       if (cmpV != null) allVals.push(cmpV);
-      var tip = tipHtml(dayLabel, curV, cmpV, formatter, invertDelta);
-      var row = [dayLabel, curV, tip, cmpV, EMPTY_TIP];
+      var row = [dayLabel, curV, cmpV, calcDelta(curV, cmpV)];
       if (hasBounds) {
         row.push(bounds.lower, bounds.upper);
       }
       dt.addRow(row);
     }
+    getDeltaFmt().format(dt, 3);
 
     if (hasBounds) {
       allVals.push(bounds.lower, bounds.upper);
@@ -410,25 +402,23 @@ function toggleDrill(id, url) {
 
     var seriesOpts = {
       0: {color: color, lineWidth: 2},
-      1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1}
+      1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1},
+      2: {lineWidth: 0, pointSize: 0, visibleInLegend: false, targetAxisIndex: 1}
     };
     if (hasBounds) {
-      seriesOpts[2] = {color: '#000000', lineWidth: 1, lineDashStyle: null, pointSize: 0, visibleInLegend: true};
       seriesOpts[3] = {color: '#000000', lineWidth: 1, lineDashStyle: null, pointSize: 0, visibleInLegend: true};
+      seriesOpts[4] = {color: '#000000', lineWidth: 1, lineDashStyle: null, pointSize: 0, visibleInLegend: true};
     }
 
     new google.visualization.LineChart(el).draw(dt, {
       curveType: 'function',
-      tooltip: {isHtml: true},
       series: seriesOpts,
       chartArea: {left: 55, right: 15, height: '70%'},
       backgroundColor: 'transparent',
       hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
-      vAxis: {
-        gridlines: {color: '#DAEDFF', count: 6},
-        textStyle: {color: '#6B7D94'},
-        format: '0.0%',
-        viewWindow: {min: vMin, max: vMax}
+      vAxes: {
+        0: {gridlines: {color: '#DAEDFF', count: 6}, textStyle: {color: '#6B7D94'}, format: '0.0%', viewWindow: {min: vMin, max: vMax}},
+        1: {textPosition: 'none', gridlines: {count: 0}}
       },
       legend: {position: 'top', textStyle: {color: '#313E4F'}},
       focusTarget: 'category'
@@ -442,9 +432,8 @@ function toggleDrill(id, url) {
     var dt = new google.visualization.DataTable();
     dt.addColumn('string', 'Day');
     dt.addColumn('number', 'Current');
-    dt.addColumn(TIP);
     dt.addColumn('number', 'Compare');
-    dt.addColumn(TIP);
+    dt.addColumn('number', 'Delta');
 
     var cur = trend.current || [];
     var cmp = trend.compare || [];
@@ -454,25 +443,28 @@ function toggleDrill(id, url) {
       var dayLabel = (cur[i] || cmp[i] || {}).day || '';
       var curV = cur[i] ? computeFn(cur[i]) : null;
       var cmpV = cmp[i] ? computeFn(cmp[i]) : null;
-      var tip = tipHtml(dayLabel, curV, cmpV, formatter, invertDelta);
-      dt.addRow([dayLabel, curV, tip, cmpV, EMPTY_TIP]);
+      dt.addRow([dayLabel, curV, cmpV, calcDelta(curV, cmpV)]);
     }
+    getDeltaFmt().format(dt, 3);
 
     var opts = {
       curveType: 'function',
-      tooltip: {isHtml: true},
       series: {
         0: {color: color, lineWidth: 2},
-        1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1}
+        1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1},
+        2: {lineWidth: 0, pointSize: 0, visibleInLegend: false, targetAxisIndex: 1}
+      },
+      vAxes: {
+        0: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
+        1: {textPosition: 'none', gridlines: {count: 0}}
       },
       chartArea: {left: 55, right: 15, height: '70%'},
       backgroundColor: 'transparent',
       hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
-      vAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
       legend: {position: 'top', textStyle: {color: '#313E4F'}},
       focusTarget: 'category'
     };
-    if (vAxisFmt) opts.vAxis.format = vAxisFmt;
+    if (vAxisFmt) opts.vAxes[0].format = vAxisFmt;
     new google.visualization.LineChart(el).draw(dt, opts);
   }
 
