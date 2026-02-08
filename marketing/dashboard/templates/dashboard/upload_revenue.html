@@ -1,0 +1,125 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Upload Revenue Data{% endblock %}
+
+{% block content %}
+<h2 class="ui header">
+  <i class="dollar sign icon"></i>
+  <div class="content">Upload Revenue Data</div>
+</h2>
+
+<div class="ui two column stackable grid">
+
+  {# ── Left: Instructions ─────────────────────────────────────────── #}
+  <div class="six wide column">
+    <div class="ui blue segment">
+      <h4 class="ui header">Instructions</h4>
+      <div class="ui small list">
+        <div class="item">
+          <i class="green check icon"></i>
+          <div class="content"><strong>Required columns:</strong> vertical, brand, Date, Orders, Net Sales, NewSales</div>
+        </div>
+        <div class="item">
+          <i class="blue info circle icon"></i>
+          <div class="content"><strong>Date formats:</strong> YYYY-MM-DD or MM/DD/YYYY</div>
+        </div>
+        <div class="item">
+          <i class="orange sync icon"></i>
+          <div class="content"><strong>Upsert:</strong> Existing rows (same brand + date) are updated; new rows are created.</div>
+        </div>
+        <div class="item">
+          <i class="red exclamation triangle icon"></i>
+          <div class="content"><strong>Verticals must exist:</strong> All verticals in the CSV must already be created. The upload will fail listing any unknown verticals.</div>
+        </div>
+        <div class="item">
+          <i class="purple plus icon"></i>
+          <div class="content"><strong>Brand auto-create:</strong> Brands not found within a vertical are created automatically and assigned to that vertical.</div>
+        </div>
+        <div class="item">
+          <i class="grey hashtag icon"></i>
+          <div class="content"><strong>Matching:</strong> Vertical and brand are matched by name (case-insensitive, trimmed).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ui segment">
+      <h4 class="ui header">Expected Column Names</h4>
+      <div class="ui small list">
+        <div class="item"><i class="columns icon"></i> vertical</div>
+        <div class="item"><i class="columns icon"></i> brand</div>
+        <div class="item"><i class="columns icon"></i> Date</div>
+        <div class="item"><i class="columns icon"></i> Orders</div>
+        <div class="item"><i class="columns icon"></i> Net Sales</div>
+        <div class="item"><i class="columns icon"></i> NewSales</div>
+      </div>
+      <p style="color:#888;font-size:0.85em;margin-top:0.5em"><i class="info circle icon"></i> Column matching is case-insensitive.</p>
+    </div>
+  </div>
+
+  {# ── Right: Form + Results ──────────────────────────────────────── #}
+  <div class="ten wide column">
+
+    {% if error %}
+    <div class="ui negative message">
+      <div class="header">Upload Error</div>
+      <p>{{ error }}</p>
+    </div>
+    {% endif %}
+
+    {% if summary %}
+    <div class="ui positive message">
+      <div class="header">Import Complete</div>
+      <div class="ui small statistics" style="margin:1em 0">
+        <div class="statistic">
+          <div class="value">{{ summary.total }}</div>
+          <div class="label">Total Rows</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.created }}</div>
+          <div class="label">Created</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.updated }}</div>
+          <div class="label">Updated</div>
+        </div>
+        {% if summary.skipped %}
+        <div class="statistic">
+          <div class="value">{{ summary.skipped }}</div>
+          <div class="label">Skipped</div>
+        </div>
+        {% endif %}
+      </div>
+      {% if summary.brands_created %}
+      <p><i class="info circle icon"></i> Auto-created brands: {{ summary.brands_created|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    {% if summary.errors %}
+    <div class="ui warning message">
+      <div class="header">Row-Level Issues ({{ summary.errors|length }})</div>
+      <div style="max-height:200px;overflow-y:auto">
+        <div class="ui small list">
+          {% for err in summary.errors %}
+          <div class="item">{{ err }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <form class="ui form segment" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div class="field">
+        <label>CSV File</label>
+        <input type="file" name="csv_file" accept=".csv" required>
+      </div>
+
+      <button class="ui primary button" type="submit">
+        <i class="upload icon"></i> Upload &amp; Import
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

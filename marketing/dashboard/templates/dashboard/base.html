@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Weekly Performance Dashboard{% endblock %}</title>
+  <title>{% block title %}Paid Marketing Performance{% endblock %}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.css">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://www.gstatic.com/charts/loader.js"></script>
@@ -15,10 +15,14 @@
 
   <div class="ui fixed inverted menu" style="background:#313E4F">
     <div class="ui container">
-      <span class="header item">Weekly Performance</span>
+      <a class="header item" href="{% url 'dashboard:index' %}" style="font-weight:700">
+        <img src="{% static 'img/logo.avif' %}" alt="Logo" style="width:80px;height:auto;margin-right:0.6em;object-fit:contain">
+        Paid Marketing Performance
+      </a>
       <a class="item" href="{% url 'dashboard:index' %}">Overview</a>
       <a class="item" href="{% url 'dashboard:budgets' %}">Budgets</a>
       <a class="item" href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>
+      <a class="item" href="{% url 'dashboard:upload_revenue' %}">Revenue Data</a>
       <div class="right menu">
         <a class="item" href="{% url 'dashboard:help' %}">
           <i class="help circle icon"></i> Help

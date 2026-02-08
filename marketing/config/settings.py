@@ -7,6 +7,8 @@ SECRET_KEY = "django-insecure-mktg-dash-dev-key-change-in-production"
 
 DEBUG = True
 
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 5000
+
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [

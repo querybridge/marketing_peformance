@@ -28,6 +28,7 @@ urlpatterns = [
     path("verticals/", views.verticals, name="verticals"),
     path("brands/", views.brands, name="brands"),
     path("upload/", views.upload_csv, name="upload_csv"),
+    path("revenue/upload/", views.upload_revenue, name="upload_revenue"),
     path("campaigns/match/", views.match_campaigns, name="match_campaigns"),
     path("help/", views.help_page, name="help"),
 ]

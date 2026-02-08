@@ -1,5 +1,5 @@
 """
-ReportLab PDF builder for the Weekly Performance Dashboard.
+ReportLab PDF builder for the Paid Marketing Performance Dashboard.
 
 Generates an A4 landscape PDF with five sections:
   1. Header   — navy banner with title, date range, period label, pacing note
@@ -183,7 +183,7 @@ STYLE_FOOTER = ParagraphStyle(
 
 def _build_header(period_info):
     """Navy banner with title, date range, period label, pacing note."""
-    title = period_info.get("title", "Weekly Performance Dashboard")
+    title = period_info.get("title", "Paid Marketing Performance")
     date_range = period_info.get("date_range", "")
     period_label = period_info.get("period_label", "")
     pacing_note = period_info.get("pacing_note", "")
@@ -547,7 +547,7 @@ def compute_totals(brand_rows):
 
 def build_pdf(brand_rows, exceptions, trend, totals, period_info):
     """
-    Build the complete Weekly Performance Dashboard PDF and return bytes.
+    Build the complete Paid Marketing Performance PDF and return bytes.
 
     Parameters
     ----------
@@ -576,7 +576,7 @@ def build_pdf(brand_rows, exceptions, trend, totals, period_info):
         rightMargin=20,
         topMargin=15,
         bottomMargin=15,
-        title="Weekly Performance Dashboard",
+        title="Paid Marketing Performance",
     )
 
     flowables = []

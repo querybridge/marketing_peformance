@@ -603,7 +603,7 @@ def export_pdf(request):
         vert = DimVertical.objects.filter(id=p["vertical_id"]).first()
         vertical_name = vert.name if vert else None
 
-    title = "Weekly Performance Dashboard"
+    title = "Paid Marketing Performance"
     if vertical_name:
         title += f" — {vertical_name}"
 
@@ -1627,3 +1627,213 @@ def help_page(request):
             "tooltip": meta["tooltip"],
         })
     return render(request, "dashboard/help.html", {"help_alerts": help_alerts})
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Revenue Data Upload
+# ───────────────────────────────────────────────────────────────────────────
+
+REVENUE_REQUIRED_COLUMNS = ["vertical", "brand", "date", "orders", "net sales", "newsales"]
+
+
+def _parse_currency(raw):
+    """Parse a currency string like '$1,234.56' or '($309)' into a Decimal."""
+    s = raw.strip()
+    neg = s.startswith("(") and s.endswith(")")
+    if neg:
+        s = s[1:-1]
+    s = s.replace(",", "").replace("$", "").strip()
+    val = Decimal(s)
+    return -val if neg else val
+
+
+def _parse_revenue_date(val):
+    """Parse date string accepting YYYY-MM-DD, M/D/YYYY, and M/D/YY formats."""
+    if not val:
+        return None
+    val = val.strip()
+    # YYYY-MM-DD
+    try:
+        return date.fromisoformat(val)
+    except (ValueError, TypeError):
+        pass
+    # M/D/YYYY or M/D/YY
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})$', val)
+    if m:
+        try:
+            year = int(m.group(3))
+            if year < 100:
+                year += 2000
+            return date(year, int(m.group(1)), int(m.group(2)))
+        except ValueError:
+            pass
+    return None
+
+
+def upload_revenue(request):
+    """Upload backend revenue/orders CSV — source of truth for brand-level performance."""
+    error = None
+    summary = None
+
+    if request.method == "POST":
+        csv_file = request.FILES.get("csv_file")
+        if not csv_file:
+            error = "No file selected."
+        else:
+            raw = csv_file.read()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw.decode("latin-1")
+
+            lines = text.splitlines()
+            if not lines:
+                error = "CSV file is empty."
+            else:
+                reader = csv.reader(io.StringIO(text))
+                raw_headers = next(reader)
+                headers = [h.strip().lower() for h in raw_headers]
+
+                # ── Validate required columns ──
+                missing = [
+                    col for col in REVENUE_REQUIRED_COLUMNS
+                    if col not in headers
+                ]
+                if missing:
+                    error = f"Missing required columns: {', '.join(missing)}. Found: {', '.join(raw_headers)}"
+                else:
+                    col_idx = {col: headers.index(col) for col in REVENUE_REQUIRED_COLUMNS}
+
+                    # ── First pass: collect all vertical names and validate ──
+                    rows_data = []
+                    row_errors = []
+                    vertical_names = set()
+                    for line_num, row in enumerate(reader, start=2):
+                        if not any(cell.strip() for cell in row):
+                            continue
+
+                        vert_name = row[col_idx["vertical"]].strip()
+                        brand_name = row[col_idx["brand"]].strip()
+                        date_raw = row[col_idx["date"]].strip()
+                        orders_raw = row[col_idx["orders"]].strip()
+                        net_raw = row[col_idx["net sales"]].strip()
+                        new_raw = row[col_idx["newsales"]].strip()
+
+                        if not vert_name:
+                            row_errors.append(f"Row {line_num}: missing vertical.")
+                            continue
+                        if not brand_name:
+                            row_errors.append(f"Row {line_num}: missing brand.")
+                            continue
+
+                        date_val = _parse_revenue_date(date_raw)
+                        if not date_val:
+                            row_errors.append(f"Row {line_num}: invalid date '{date_raw}'.")
+                            continue
+
+                        try:
+                            orders_val = int(orders_raw.replace(",", ""))
+                        except (ValueError, TypeError):
+                            row_errors.append(f"Row {line_num}: invalid orders '{orders_raw}'.")
+                            continue
+
+                        try:
+                            net_val = _parse_currency(net_raw)
+                        except (InvalidOperation, ValueError, TypeError):
+                            row_errors.append(f"Row {line_num}: invalid Net Sales '{net_raw}'.")
+                            continue
+
+                        try:
+                            new_val = _parse_currency(new_raw)
+                        except (InvalidOperation, ValueError, TypeError):
+                            row_errors.append(f"Row {line_num}: invalid NewSales '{new_raw}'.")
+                            continue
+
+                        vertical_names.add(vert_name)
+                        rows_data.append({
+                            "line": line_num,
+                            "vertical": vert_name,
+                            "brand": brand_name,
+                            "date": date_val,
+                            "orders": orders_val,
+                            "net_revenue": net_val,
+                            "new_revenue": new_val,
+                        })
+
+                    # ── Check all verticals exist ──
+                    vert_lookup = {}
+                    for v in DimVertical.objects.all():
+                        vert_lookup[v.name.lower().strip()] = v
+
+                    unknown_verts = sorted({
+                        r["vertical"] for r in rows_data
+                        if r["vertical"].lower().strip() not in vert_lookup
+                    })
+                    if unknown_verts:
+                        error = (
+                            f"Unknown verticals (create them first): "
+                            f"{', '.join(unknown_verts)}"
+                        )
+                    else:
+                        # ── Process rows ──
+                        brand_cache = {}
+                        created = 0
+                        updated = 0
+                        skipped = 0
+                        brands_created = []
+
+                        for r in rows_data:
+                            vertical = vert_lookup[r["vertical"].lower().strip()]
+                            brand_key = (vertical.id, r["brand"].lower().strip())
+
+                            if brand_key not in brand_cache:
+                                brand = DimBrand.objects.filter(
+                                    vertical=vertical,
+                                    name__iexact=r["brand"].strip(),
+                                ).first()
+                                if not brand:
+                                    brand = DimBrand.objects.create(
+                                        name=r["brand"].strip(),
+                                        slug=slugify(r["brand"].strip()),
+                                        vertical=vertical,
+                                    )
+                                    brands_created.append(f"{r['brand']} ({vertical.name})")
+                                brand_cache[brand_key] = brand
+
+                            brand = brand_cache[brand_key]
+
+                            dim_date = DimDate.objects.filter(date=r["date"]).first()
+                            if not dim_date:
+                                row_errors.append(
+                                    f"Row {r['line']}: date {r['date']} not in calendar table — skipped."
+                                )
+                                skipped += 1
+                                continue
+
+                            _, is_new = FactOrdersDaily.objects.update_or_create(
+                                brand=brand,
+                                date=dim_date,
+                                defaults={
+                                    "orders": r["orders"],
+                                    "net_revenue": r["net_revenue"],
+                                    "new_revenue": r["new_revenue"],
+                                },
+                            )
+                            if is_new:
+                                created += 1
+                            else:
+                                updated += 1
+
+                        summary = {
+                            "total": len(rows_data),
+                            "created": created,
+                            "updated": updated,
+                            "skipped": skipped,
+                            "brands_created": brands_created,
+                            "errors": row_errors,
+                        }
+
+    return render(request, "dashboard/upload_revenue.html", {
+        "error": error,
+        "summary": summary,
+    })

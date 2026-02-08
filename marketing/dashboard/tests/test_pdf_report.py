@@ -102,7 +102,7 @@ SAMPLE_TREND = {
 }
 
 SAMPLE_PERIOD_INFO = {
-    "title": "Weekly Performance Dashboard",
+    "title": "Paid Marketing Performance",
     "date_range": "2026-02-02 \u2013 2026-02-08",
     "period_label": "This Week vs Last Week",
     "pacing_note": "Pacing: 5 elapsed day(s)",
