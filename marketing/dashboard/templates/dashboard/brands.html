@@ -13,6 +13,12 @@
 </div>
 {% endif %}
 
+{% if upload_summary %}
+<div class="ui positive message">
+  <i class="check circle icon"></i> {{ upload_summary }}
+</div>
+{% endif %}
+
 <!-- ── Filter by Vertical ────────────────────────────────────── -->
 <form method="get" action="{% url 'dashboard:brands' %}" class="ui form" style="margin-bottom:1.5em">
   <div class="field" style="max-width:320px">
@@ -26,17 +32,39 @@
   </div>
 </form>
 
+<!-- ── Upload Brands CSV ───────────────────────────────────────── -->
+<form method="post" enctype="multipart/form-data" action="{% url 'dashboard:brands' %}{% if selected_vertical %}?vertical={{ selected_vertical }}{% endif %}" class="ui form" style="margin-bottom:1.5em">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="upload_brands">
+  <div class="fields">
+    <div class="eight wide field">
+      <input type="file" name="brand_csv" accept=".csv" required>
+    </div>
+    <div class="four wide field">
+      <button type="submit" class="ui button">
+        <i class="upload icon"></i> Upload Brands CSV
+      </button>
+    </div>
+  </div>
+  <p style="color:#888;font-size:0.85em;margin-top:-0.5em">
+    CSV columns: brand_name, brand_id, vertical (optional)
+  </p>
+</form>
+
 <!-- ── Add Brand ─────────────────────────────────────────────── -->
 <form method="post" action="{% url 'dashboard:brands' %}{% if selected_vertical %}?vertical={{ selected_vertical }}{% endif %}" class="ui form" style="margin-bottom:1.5em">
   {% csrf_token %}
   <input type="hidden" name="action" value="add">
   <div class="fields">
-    <div class="eight wide field">
+    <div class="six wide field">
       <input type="text" name="name" placeholder="New brand name…" required>
     </div>
-    <div class="five wide field">
-      <select name="vertical_id" class="ui dropdown" required>
-        <option value="">Vertical…</option>
+    <div class="three wide field">
+      <input type="number" name="brand_id" placeholder="Brand ID…">
+    </div>
+    <div class="four wide field">
+      <select name="vertical_id" class="ui dropdown">
+        <option value="">Vertical (optional)…</option>
         {% for v in verticals %}
         <option value="{{ v.id }}" {% if v.id == selected_vertical %}selected{% endif %}>{{ v.name }}</option>
         {% endfor %}
@@ -55,10 +83,11 @@
   <thead>
     <tr>
       <th>Brand</th>
+      <th>Brand ID</th>
       <th>Vertical</th>
       <th>Slug</th>
       <th class="center aligned" style="width:110px">Campaigns</th>
-      <th style="width:320px">Actions</th>
+      <th style="width:380px">Actions</th>
     </tr>
   </thead>
   <tbody>
@@ -73,13 +102,17 @@
           <input type="hidden" name="action" value="edit">
           <input type="hidden" name="id" value="{{ row.brand.id }}">
           <div class="fields" style="margin:0">
-            <div class="ten wide field" style="margin:0">
+            <div class="six wide field" style="margin:0">
               <input type="text" name="name" value="{{ row.brand.name }}" required>
+            </div>
+            <div class="four wide field" style="margin:0">
+              <input type="number" name="brand_id" value="{{ row.brand.brand_id|default_if_none:'' }}" placeholder="Brand ID">
             </div>
             <div class="six wide field" style="margin:0">
               <select name="vertical_id" class="ui dropdown">
+                <option value="">No vertical</option>
                 {% for v in verticals %}
-                <option value="{{ v.id }}" {% if v.id == row.brand.vertical_id %}selected{% endif %}>{{ v.name }}</option>
+                <option value="{{ v.id }}" {% if row.brand.vertical_id and v.id == row.brand.vertical_id %}selected{% endif %}>{{ v.name }}</option>
                 {% endfor %}
               </select>
             </div>
@@ -91,7 +124,8 @@
           </div>
         </form>
       </td>
-      <td>{{ row.brand.vertical.name }}</td>
+      <td>{{ row.brand.brand_id|default:"—" }}</td>
+      <td>{{ row.brand.vertical.name|default:"—" }}</td>
       <td style="color:#6B7D94">{{ row.brand.slug }}</td>
       <td class="center aligned">{{ row.campaign_count }}</td>
       <td>
@@ -116,7 +150,7 @@
       </td>
     </tr>
     {% empty %}
-    <tr><td colspan="5" class="center aligned">No brands found. Add one above.</td></tr>
+    <tr><td colspan="6" class="center aligned">No brands found. Add one above or upload a CSV.</td></tr>
     {% endfor %}
   </tbody>
 </table>

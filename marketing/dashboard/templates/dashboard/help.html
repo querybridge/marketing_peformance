@@ -1,0 +1,430 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Help — Weekly Performance Dashboard{% endblock %}
+
+{% block content %}
+<div style="max-width:860px">
+
+<h2 class="ui header">
+  <i class="help circle icon"></i>
+  <div class="content">
+    Help &amp; User Guide
+    <div class="sub header">How to use the Weekly Performance Dashboard</div>
+  </div>
+</h2>
+
+{# ── Table of Contents ────────────────────────────────────────────── #}
+<div class="ui segment" style="background:#f8fafd">
+  <h4 class="ui header">Contents</h4>
+  <div class="ui ordered list">
+    <a class="item" href="#purpose">What This App Is</a>
+    <a class="item" href="#concepts">Core Concepts</a>
+    <a class="item" href="#setup">First-Time Setup</a>
+    <a class="item" href="#cm-workflow">Weekly Campaign Manager Workflow</a>
+    <a class="item" href="#gm-workflow">Weekly GM / Vertical Owner Walkthrough</a>
+    <a class="item" href="#pitfalls">Common Pitfalls &amp; How to Interpret Data</a>
+    <a class="item" href="#links">Where to Go Next</a>
+  </div>
+</div>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 1. PURPOSE                                                        #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="purpose">
+  <i class="bullseye icon"></i>
+  <div class="content">1. What This App Is</div>
+</h3>
+
+<p>
+  The Weekly Performance Dashboard is an <strong>operational decision tool</strong>
+  for campaign managers and general managers. It answers a single question every week:
+  <em>Are we spending the right amount on each brand to hit our revenue and efficiency targets?</em>
+</p>
+
+<div class="ui three column stackable grid" style="margin:1em 0">
+  <div class="column">
+    <div class="ui segment">
+      <h5 class="ui header"><i class="chart line icon"></i> Weekly Monitoring</h5>
+      <p>Track revenue, spend, and MTS (Marketing-to-Sales ratio) at the vertical, brand, and campaign level. Compare week-over-week, month-over-month, or year-over-year.</p>
+    </div>
+  </div>
+  <div class="column">
+    <div class="ui segment">
+      <h5 class="ui header"><i class="balance scale icon"></i> Budget Accountability</h5>
+      <p>Compare actual performance against monthly budgets. Identify brands that are overspending, underspending, or pacing off-target.</p>
+    </div>
+  </div>
+  <div class="column">
+    <div class="ui segment">
+      <h5 class="ui header"><i class="search icon"></i> Campaign Visibility</h5>
+      <p>Drill from vertical-level totals down to individual campaigns. See exactly where spend is going and which campaigns are driving results.</p>
+    </div>
+  </div>
+</div>
+
+<div class="ui info message">
+  <i class="info circle icon"></i>
+  <strong>This is not a financial accounting system.</strong>
+  Revenue figures come from uploaded CSV data and ad-platform reports. They are best used
+  for week-to-week directional decisions, not for invoice reconciliation or financial close.
+</div>
+
+<h4 class="ui header">Net Revenue vs New Revenue</h4>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:150px"><strong>Net Revenue</strong></td>
+      <td>Revenue after cancellations, returns, and chargebacks. This is the backend source of truth. Use it as the default for performance reviews.</td>
+    </tr>
+    <tr>
+      <td><strong>New Revenue</strong></td>
+      <td>Revenue before cancellations. Useful for marketing pacing because it reflects demand generated <em>this period</em>, before downstream fallout. Toggle between the two using the Revenue selector on the Overview page.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 2. CORE CONCEPTS                                                  #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="concepts">
+  <i class="lightbulb icon"></i>
+  <div class="content">2. Core Concepts</div>
+</h3>
+
+<table class="ui definition compact table">
+  <tbody>
+    <tr>
+      <td class="three wide"><strong>Vertical</strong></td>
+      <td>A top-level business segment (e.g., "Home &amp; Garden"). Verticals group brands for budgeting and reporting.</td>
+    </tr>
+    <tr>
+      <td><strong>Brand</strong></td>
+      <td>A P&amp;L-owning entity within a vertical. Budgets are set per brand. Every campaign belongs to exactly one brand.</td>
+    </tr>
+    <tr>
+      <td><strong>Campaign</strong></td>
+      <td>An individual ad-platform campaign (Google Ads, Meta, Amazon, etc.). Campaigns carry daily spend, click, and conversion data.</td>
+    </tr>
+    <tr>
+      <td><strong>MTS</strong></td>
+      <td>Marketing-to-Sales ratio = Spend &divide; Revenue. An MTS of 25% means you spend $0.25 for every $1 of revenue. <strong>Lower is more efficient</strong>, but too low may mean you are under-investing and leaving revenue on the table.</td>
+    </tr>
+    <tr>
+      <td><strong>MTS Budget</strong></td>
+      <td>The target MTS ratio set in the Budgets page. Brands within &plusmn;50 basis points of target are "on track." Brands significantly below target are "Overly Efficient" (potential scale opportunity). Brands above target are "Under Efficient" (spending too much for the revenue generated).</td>
+    </tr>
+    <tr>
+      <td><strong>Current vs Compare</strong></td>
+      <td>Every view compares two time windows. The <em>Current</em> period is what you selected (e.g., This Week). The <em>Compare</em> period is an equal-length window shifted back by the chosen comparison: <strong>WOW</strong> (week-over-week), <strong>MOM</strong> (month-over-month), or <strong>YOY</strong> (year-over-year, 52-week offset).</td>
+    </tr>
+    <tr>
+      <td><strong>Platform Revenue<br>(below Brand)</strong></td>
+      <td>When you drill into a brand and see Source, Campaign Type, or Campaign rows, the Revenue column shows <em>ad-platform conversion value</em>, not backend revenue. This is because backend revenue (from order systems) only exists at the brand level, not per campaign. Platform revenue will generally not sum to the brand-level figure.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 3. FIRST-TIME SETUP                                              #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="setup">
+  <i class="tasks icon"></i>
+  <div class="content">3. First-Time Setup</div>
+</h3>
+
+<div class="ui warning message">
+  <i class="exclamation triangle icon"></i>
+  <strong>Complete these steps once before relying on weekly reporting.</strong>
+  The dashboard cannot produce meaningful results until brands, campaign data, and budgets are in place.
+</div>
+
+<div class="ui ordered list" style="font-size:1.05em">
+  <div class="item">
+    <div class="content">
+      <div class="header">Create Verticals</div>
+      Go to <a href="{% url 'dashboard:verticals' %}">Verticals</a> and add your business segments.
+    </div>
+  </div>
+  <div class="item">
+    <div class="content">
+      <div class="header">Create or Upload Brands</div>
+      Go to <a href="{% url 'dashboard:brands' %}">Brands</a>. Add brands one by one, or upload a CSV with <code>brand_name</code>, <code>brand_id</code>, and optionally <code>vertical</code> columns. Assign a Brand ID to each brand so campaigns auto-map during data upload.
+    </div>
+  </div>
+  <div class="item">
+    <div class="content">
+      <div class="header">Upload Campaign Media Data</div>
+      Go to <a href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>. Upload CSV exports from Google Ads, Bing Ads, Meta Ads, or Amazon Marketplace. The system auto-creates campaigns it hasn't seen before.
+    </div>
+  </div>
+  <div class="item">
+    <div class="content">
+      <div class="header">Verify Campaign-to-Brand Assignments</div>
+      Go to <a href="{% url 'dashboard:match_campaigns' %}">Match Campaigns</a>. Any auto-created campaigns are initially assigned to "Unknown." Reassign them to the correct brand. If your campaigns use the <code>brand_id;</code> naming convention, many will auto-assign.
+    </div>
+  </div>
+  <div class="item">
+    <div class="content">
+      <div class="header">Enter Annual Budgets</div>
+      Go to <a href="{% url 'dashboard:budgets' %}">Budgets</a>. Select a vertical and year, then enter the monthly revenue budget, MTS target, and cancellation rate. Brand-level budgets are auto-allocated based on prior-year revenue share, or can be manually overridden.
+    </div>
+  </div>
+  <div class="item">
+    <div class="content">
+      <div class="header">Sanity-Check the Overview</div>
+      Go to <a href="{% url 'dashboard:index' %}">Overview</a>. Confirm that brands appear with data, charts render, and alert classifications look reasonable. If brands show "Missing Budget" or "Missing Revenue" alerts, revisit the steps above.
+    </div>
+  </div>
+</div>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 4. WEEKLY CAMPAIGN MANAGER WORKFLOW                               #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="cm-workflow">
+  <i class="user icon"></i>
+  <div class="content">4. Weekly Campaign Manager Workflow</div>
+</h3>
+
+<p>
+  Every week (typically Monday or Tuesday after weekend data finalizes), follow this routine:
+</p>
+
+<h4 class="ui header">Step 1: Open the Overview</h4>
+<p>
+  Navigate to <a href="{% url 'dashboard:index' %}">Overview</a>.
+  Set the filters to <strong>This Week / WOW</strong> and your preferred revenue type (Net is the default).
+  If you manage a specific vertical, select it from the Vertical dropdown.
+</p>
+
+<h4 class="ui header">Step 2: Read the Top Charts</h4>
+<ul class="ui list">
+  <li><strong>Revenue chart:</strong> Is the current line above or below the compare line? A widening gap means things are accelerating (good) or deteriorating (bad).</li>
+  <li><strong>Spend chart:</strong> Is spend tracking proportionally with revenue? If spend is up but revenue is flat, efficiency is declining.</li>
+  <li><strong>MTS chart:</strong> Is the current MTS within the budget band (dashed lines)? If it's above the upper bound, you're overspending relative to revenue. Below the lower bound, you may be under-investing.</li>
+</ul>
+
+<h4 class="ui header">Step 3: Review the Brand Performance Table</h4>
+<p>Scan the table for color-coded alert badges:</p>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:200px"><span style="color:#db2828"><strong>Needs Attention</strong></span></td>
+      <td>Revenue is down significantly vs prior year. Investigate immediately.</td>
+    </tr>
+    <tr>
+      <td><span style="color:#f2711c"><strong>Pacing Risk</strong></span></td>
+      <td>Revenue is declining but spend isn't. Budget may be wasted.</td>
+    </tr>
+    <tr>
+      <td><span style="color:#a333c8"><strong>Under Efficient</strong></span></td>
+      <td>MTS is above target. Consider reducing spend or reallocating to better-performing brands.</td>
+    </tr>
+    <tr>
+      <td><span style="color:#2185d0"><strong>Overly Efficient</strong></span></td>
+      <td>MTS is below target. This brand may have room to scale&mdash;consider increasing spend.</td>
+    </tr>
+    <tr>
+      <td><span style="color:#21ba45"><strong>Doing Well</strong></span></td>
+      <td>Revenue is growing and MTS is on target. No action needed.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">Step 4: Drill Down (When Needed)</h4>
+<p>
+  Click a brand row to expand it and see Source-level, then Campaign Type-level, then Campaign-level breakdowns.
+  <strong>Drill down when:</strong> a brand's alert status doesn't match your expectation, or you need to find which specific campaigns to pause or scale.
+  <strong>Don't drill down when:</strong> the brand is "Doing Well" and you just need a quick status check.
+</p>
+
+<h4 class="ui header">Step 5: Take Action</h4>
+<p>
+  The primary action from this dashboard is <strong>budget reallocation</strong>:
+  shift spend from Under Efficient brands toward Overly Efficient brands.
+  The goal each week is to pace toward your MTS targets and monthly revenue goals.
+  Make the actual budget changes in your ad platforms, then confirm the impact next week.
+</p>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 5. WEEKLY GM / VERTICAL OWNER WALKTHROUGH                        #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="gm-workflow">
+  <i class="building icon"></i>
+  <div class="content">5. Weekly GM / Vertical Owner Walkthrough</div>
+</h3>
+
+<p>
+  This section is for general managers and vertical owners who review performance in weekly
+  meetings. The goal is a 10-minute review that answers four questions in order:
+</p>
+
+<div class="ui segments">
+  <div class="ui segment">
+    <h4 class="ui header">Question 1: Are we up or down at the vertical level?</h4>
+    <p>
+      <strong>Where to look:</strong> Overview page, Revenue and Spend charts.<br>
+      <strong>What to say:</strong> "Revenue is [up/down] [X]% week-over-week. Spend is [up/down] [X]%."
+      If both move in the same direction by similar amounts, efficiency is stable.
+      If revenue is down but spend is up, flag it.
+    </p>
+  </div>
+  <div class="ui segment">
+    <h4 class="ui header">Question 2: Are we within MTS targets?</h4>
+    <p>
+      <strong>Where to look:</strong> MTS chart. The dashed lines show the budget band (&plusmn;50 bps).<br>
+      <strong>What to say:</strong> "Our blended MTS is [X]% against a [Y]% target. We are [on target / above / below]."
+      Above target means overspending; below means potential room to invest more.
+    </p>
+  </div>
+  <div class="ui segment">
+    <h4 class="ui header">Question 3: Which brands are driving the change?</h4>
+    <p>
+      <strong>Where to look:</strong> Brand Performance table, sorted by the delta columns.<br>
+      <strong>What to say:</strong> "Brand A is up 15% WOW and contributing most of the growth. Brand B is down 20% and dragging the vertical."
+      Focus on the two or three brands with the largest absolute revenue deltas.
+    </p>
+  </div>
+  <div class="ui segment">
+    <h4 class="ui header">Question 4: Which brands need action?</h4>
+    <p>
+      <strong>Where to look:</strong> Alert badges in the Brand Performance table.<br>
+      <strong>What to say:</strong>
+    </p>
+    <ul>
+      <li>"Brand C is flagged <em>Needs Attention</em>&mdash;we should investigate the revenue drop and decide whether to pause campaigns or adjust bids."</li>
+      <li>"Brand D is <em>Overly Efficient</em>&mdash;we should test increasing daily budgets by 10&ndash;15% to capture incremental revenue."</li>
+      <li>"Brand E is <em>Under Efficient</em>&mdash;we should pull back spend and reallocate to better performers."</li>
+    </ul>
+  </div>
+</div>
+
+<p>
+  <strong>Wrap up</strong> by confirming who owns each action item and when the changes will be live.
+  Use the <a href="{% url 'dashboard:export_pdf' %}">PDF export</a> to share the snapshot with stakeholders who weren't in the meeting.
+</p>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 6. COMMON PITFALLS                                               #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="pitfalls">
+  <i class="exclamation circle icon"></i>
+  <div class="content">6. Common Pitfalls &amp; How to Interpret Data</div>
+</h3>
+
+<table class="ui compact celled table">
+  <thead>
+    <tr>
+      <th style="width:35%">What You See</th>
+      <th>Why It Happens</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Platform revenue doesn't match backend revenue</strong></td>
+      <td>At the brand level, revenue comes from your order/revenue system (CSV upload). Below the brand level (Source, Campaign Type, Campaign), revenue is the ad platform's last-click conversion value. These are different data sources with different attribution models. They are not expected to match.</td>
+    </tr>
+    <tr>
+      <td><strong>A campaign shows spend but $0 revenue</strong></td>
+      <td>The ad platform did not attribute any conversions to that campaign in the selected period. This is common for upper-funnel campaigns (Display, Video) that assist conversions but don't get last-click credit. It does not mean the campaign is worthless.</td>
+    </tr>
+    <tr>
+      <td><strong>"Overly Efficient" feels like a good thing</strong></td>
+      <td>Being well below your MTS target means your cost-per-dollar-of-revenue is low&mdash;but it also means you may be under-investing. If a brand can profitably absorb more spend, leaving budget on the table means leaving revenue on the table. The alert is a prompt to test scaling up.</td>
+    </tr>
+    <tr>
+      <td><strong>Partial-period numbers look low</strong></td>
+      <td>Presets like "This Week" and "This Month" only include data through yesterday. Early in the week or month, totals will be small. The comparison period is trimmed to the same number of elapsed days (pacing), so deltas remain meaningful.</td>
+    </tr>
+    <tr>
+      <td><strong>"Missing Revenue" or "Missing Budget" alerts</strong></td>
+      <td>Revenue data hasn't been uploaded for this brand/period, or budgets haven't been entered. These are data-quality alerts, not performance alerts. Upload the missing data or enter budgets to resolve them.</td>
+    </tr>
+    <tr>
+      <td><strong>MTS shows "&mdash;" for a brand</strong></td>
+      <td>Revenue is zero for the selected period (no CSV data uploaded, or zero orders). MTS is undefined when revenue is zero&mdash;the dashboard shows a dash instead of infinity or zero.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 7. WHERE TO GO NEXT                                              #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="links">
+  <i class="compass icon"></i>
+  <div class="content">7. Where to Go Next</div>
+</h3>
+
+<div class="ui relaxed divided list" style="font-size:1.05em">
+  <div class="item">
+    <i class="chart line icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:index' %}">Overview</a>
+      <div class="description">Weekly performance view with charts, brand table, and alert classifications.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="dollar sign icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:budgets' %}">Budgets</a>
+      <div class="description">Set or adjust monthly revenue budgets, MTS targets, and cancellation rates by vertical.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="upload icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>
+      <div class="description">Upload CSV exports from Google Ads, Bing Ads, Meta Ads, or Amazon Marketplace.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="exchange icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:match_campaigns' %}">Match Campaigns</a>
+      <div class="description">Reassign campaigns to the correct brand after auto-creation.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="tags icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:brands' %}">Brands</a>
+      <div class="description">Add, edit, or bulk-upload brands and Brand IDs.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="sitemap icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:verticals' %}">Verticals</a>
+      <div class="description">Manage top-level business segments.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="book icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:data_dictionary' %}">Data Dictionary</a>
+      <div class="description">Detailed definitions for every metric, including how each is calculated and when nulls appear.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="bell icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:alert_spec' %}">Alert Rules</a>
+      <div class="description">Exact logic behind each alert classification (Needs Attention, Doing Well, etc.).</div>
+    </div>
+  </div>
+</div>
+
+</div>{# /max-width wrapper #}
+{% endblock %}

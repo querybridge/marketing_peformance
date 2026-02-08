@@ -48,13 +48,25 @@ class DimBrand(models.Model):
 
     name = models.CharField(max_length=200)
     slug = models.SlugField()
+    brand_id = models.IntegerField(
+        null=True, blank=True,
+        help_text="External brand identifier used in campaign naming convention",
+    )
     vertical = models.ForeignKey(
-        DimVertical, on_delete=models.CASCADE, related_name="brands"
+        DimVertical, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="brands",
     )
 
     class Meta:
         ordering = ["name"]
-        unique_together = ["name", "vertical"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["brand_id", "vertical"],
+                name="unique_brand_id_per_vertical",
+                condition=models.Q(brand_id__isnull=False),
+            ),
+        ]
 
     def __str__(self):
         return self.name
@@ -95,6 +107,12 @@ class DimCampaign(models.Model):
         ("completed", "Completed"),
     ]
 
+    AMAZON_TYPES = [
+        ("", "—"),
+        ("sponsored", "Sponsored Ads"),
+        ("feed", "Feed-based Listings"),
+    ]
+
     name = models.CharField(max_length=300)
     external_id = models.CharField(max_length=200, blank=True, default="")
     brand = models.ForeignKey(
@@ -105,6 +123,11 @@ class DimCampaign(models.Model):
     )
     campaign_type = models.ForeignKey(
         DimCampaignType, on_delete=models.CASCADE, related_name="campaigns"
+    )
+    amazon_type = models.CharField(
+        max_length=20, blank=True, default="",
+        choices=AMAZON_TYPES,
+        help_text="Amazon sub-type: Sponsored Ads or Feed-based Listings",
     )
     status = models.CharField(max_length=20, choices=STATUS, default="active")
 
@@ -174,6 +197,33 @@ class FactOrdersDaily(models.Model):
         return f"{self.brand} | {self.date}"
 
 
+class FactVerticalBudget(models.Model):
+    """Grain: vertical × month.  Stores vertical-level targets independently of brands."""
+
+    vertical = models.ForeignKey(
+        DimVertical, on_delete=models.CASCADE, related_name="vertical_budgets"
+    )
+    month = models.ForeignKey(
+        DimDate, on_delete=models.PROTECT, related_name="vertical_budgets",
+        help_text="First-of-month row in DimDate",
+    )
+    revenue_budget = models.DecimalField(max_digits=12, decimal_places=2)
+    mts_budget = models.DecimalField(
+        max_digits=6, decimal_places=4,
+        help_text="Target MTS ratio (Cost ÷ Revenue), e.g. 0.2500",
+    )
+    cancellation_rate = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="Cancellation rate as a ratio, e.g. 0.0800 = 8%",
+    )
+
+    class Meta:
+        unique_together = ["vertical", "month"]
+
+    def __str__(self):
+        return f"{self.vertical} — {self.month}"
+
+
 class FactBudget(models.Model):
     """Grain: brand × month.  Source: manual form entry."""
 
@@ -192,6 +242,10 @@ class FactBudget(models.Model):
     cancellation_rate = models.DecimalField(
         max_digits=5, decimal_places=4, default=0,
         help_text="Brand cancellation rate as a ratio, e.g. 0.0800 = 8%",
+    )
+    manually_overridden = models.BooleanField(
+        default=False,
+        help_text="True if brand budget was manually edited (not auto-allocated).",
     )
 
     class Meta:

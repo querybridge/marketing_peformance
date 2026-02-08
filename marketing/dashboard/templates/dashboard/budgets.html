@@ -1,15 +1,19 @@
 {% extends "dashboard/base.html" %}
+{% load static %}
 
 {% block title %}Budgets — Weekly Performance Dashboard{% endblock %}
 
 {% block content %}
 
 <h2 class="ui header">Budgets</h2>
-<p style="color:#6B7D94">Set monthly revenue budget and MTS target by vertical.</p>
+<p style="color:#6B7D94;max-width:640px">
+  Enter monthly vertical revenue, MTS target, and cancellation rate.
+  Brand budgets are auto-allocated from last year's revenue and can be adjusted.
+</p>
 
-<!-- ── Selectors ────────────────────────────────────────────── -->
+<!-- Step 1: Select Vertical and Year -->
 <form method="get" action="{% url 'dashboard:budgets' %}" class="ui form" style="margin-bottom:1.5em">
-  <div class="three fields">
+  <div class="two fields">
     <div class="field">
       <label>Vertical</label>
       <select name="vertical" class="ui dropdown" onchange="this.form.submit()">
@@ -28,115 +32,300 @@
         {% endfor %}
       </select>
     </div>
-    <div class="field">
-      <label>Month</label>
-      <select name="month" class="ui dropdown" onchange="this.form.submit()">
-        <option value="">Month…</option>
-        {% for num, label in month_choices %}
-        <option value="{{ num }}" {% if num == selected_month %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
   </div>
 </form>
 
 {% if saved %}
 <div class="ui success message">
   <i class="check circle icon"></i>
-  Budgets saved for <strong>{{ vertical.name }}</strong> — {{ month_obj.year_month }}.
+  Budgets saved for <strong>{{ vertical.name }}</strong> — {{ selected_year }}.
 </div>
 {% endif %}
 
-<!-- ── Budget Editor ────────────────────────────────────────── -->
-{% if vertical and month_obj %}
-<form method="post" action="{% url 'dashboard:budgets' %}?vertical={{ selected_vertical }}&year={{ selected_year }}&month={{ selected_month }}" class="ui form">
+{% if vertical and month_headers %}
+<form method="post" action="{% url 'dashboard:budgets' %}?vertical={{ selected_vertical }}&year={{ selected_year }}" class="ui form">
   {% csrf_token %}
   <input type="hidden" name="vertical" value="{{ selected_vertical }}">
   <input type="hidden" name="year" value="{{ selected_year }}">
-  <input type="hidden" name="month" value="{{ selected_month }}">
 
-  <div class="ui segment">
-    <h3 class="ui header">
-      {{ vertical.name }} — {{ month_obj.year_month }}
+  <div class="ui segment" style="padding-bottom:0.5em">
+    <h3 class="ui header" style="margin-bottom:0.3em">
+      {{ vertical.name }} — {{ selected_year }}
     </h3>
+    <p style="color:#6B7D94;font-size:0.9em;margin-bottom:1em">
+      Fill in vertical targets for each month, then review auto-allocated brand budgets below. Override any brand value if needed, then save.
+    </p>
 
-    <!-- MTS target — one value for the entire vertical -->
-    <div class="field" style="max-width:320px;margin-bottom:1.2em">
-      <label>MTS Target for {{ vertical.name }} <span style="color:#6B7D94;font-weight:normal">(Cost &divide; Revenue)</span></label>
-      <div class="ui right labeled input" style="width:100%">
-        <input type="number" name="mts_pct"
-               value="{{ mts_display }}"
-               step="0.01" min="0" max="100"
-               placeholder="e.g. 25.00"
-               style="text-align:right">
-        <div class="ui basic label">%</div>
-      </div>
-    </div>
-
-    <table class="ui compact celled striped table">
-      <thead>
-        <tr>
-          <th>Brand</th>
-          <th class="right aligned" style="width:220px">Revenue Budget ($)</th>
-          <th class="right aligned" style="width:180px">Cancellation Rate (%)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-        <tr>
-          <td><strong>{{ row.brand.name }}</strong></td>
-          <td class="right aligned">
-            <div class="ui input" style="width:100%">
-              <input type="number" name="rev_{{ row.brand.id }}"
-                     value="{{ row.revenue_budget }}"
-                     step="0.01" min="0"
-                     placeholder="e.g. 50000.00"
-                     style="text-align:right">
-            </div>
-          </td>
-          <td class="right aligned">
-            <div class="ui right labeled input" style="width:100%">
-              <input type="number" name="cancel_{{ row.brand.id }}"
-                     value="{{ row.cancellation_rate }}"
-                     step="0.01" min="0" max="100"
-                     placeholder="e.g. 8.00"
-                     style="text-align:right">
-              <div class="ui basic label">%</div>
-            </div>
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="3" class="center aligned">No brands in this vertical.</td></tr>
-        {% endfor %}
-      </tbody>
-      {% if vertical_cancel_rate != None %}
-      <tfoot>
-        <tr>
-          <td><strong>Vertical Average</strong></td>
-          <td></td>
-          <td class="right aligned"><strong>{{ vertical_cancel_rate }}%</strong></td>
-        </tr>
-      </tfoot>
-      {% endif %}
-    </table>
-
-    {% if rows %}
-    <div style="margin-top:1em">
-      <button type="submit" class="ui primary button">
-        <i class="save icon"></i> Save Budgets
-      </button>
-      <span style="color:#6B7D94;margin-left:1em;font-size:0.9em">
-        Leave revenue blank to remove a brand's budget for this month.
-      </span>
+    {% if brand_rows %}
+    <div class="ui icon input" style="margin-bottom:1em;width:280px">
+      <input type="text" id="brand-search" placeholder="Filter brands…">
+      <i class="search icon"></i>
     </div>
     {% endif %}
+
+    <style>
+      /* ── Table container ── */
+      .budget-table-wrap {
+        overflow-x: auto;
+        max-height: 80vh;
+        overflow-y: auto;
+        border: 1px solid #d4d4d5;
+        border-radius: 4px;
+      }
+      .budget-table-wrap table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: auto;
+        margin: 0;
+      }
+
+      /* ── Sticky header + first column ── */
+      .budget-table-wrap thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f0f1f3;
+        border-bottom: 2px solid #bfc3c9;
+        padding: 8px 10px;
+        font-size: 0.92em;
+      }
+      .budget-table-wrap thead th:first-child {
+        z-index: 3;
+        left: 0;
+      }
+      .budget-table-wrap tbody td:first-child {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background: inherit;
+        border-right: 1px solid #d4d4d5;
+      }
+
+      /* ── Cell defaults ── */
+      .budget-table-wrap td,
+      .budget-table-wrap th {
+        white-space: nowrap;
+        padding: 5px 8px;
+        border-bottom: 1px solid #ebebeb;
+      }
+
+      /* ── Section headers ── */
+      .section-hdr td {
+        background: #e8eaed !important;
+        font-weight: 700;
+        font-size: 0.85em;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #444;
+        padding: 8px 10px;
+        border-bottom: 2px solid #d4d4d5;
+      }
+
+      /* ── Vertical target rows ── */
+      .vtarget-row td {
+        background: #f9fafb;
+      }
+      .vtarget-row td:first-child {
+        background: #f9fafb;
+        font-weight: 600;
+        color: #333;
+        min-width: 210px;
+      }
+
+      /* ── Computed (read-only) row ── */
+      .computed-row td {
+        background: #f4f5f7;
+        color: #666;
+        font-style: italic;
+      }
+      .computed-row td:first-child {
+        background: #f4f5f7;
+        font-weight: 600;
+      }
+
+      /* ── Brand rows ── */
+      .brand-row td:first-child {
+        background: #fff;
+        font-weight: 600;
+        min-width: 180px;
+      }
+      .brand-row td { background: #fff; }
+
+      /* ── Brand revenue input ── */
+      .brand-rev-input {
+        width: 90px;
+        text-align: right;
+        border: 1px solid #d4d4d5;
+        border-radius: 3px;
+        padding: 3px 6px;
+        font-size: 0.92em;
+        background: #fff;
+        transition: border-color 0.15s;
+      }
+      .brand-rev-input:focus {
+        border-color: #2185d0;
+        outline: none;
+      }
+      .brand-rev-input.overridden {
+        border-left: 3px solid #f2711c;
+      }
+      .brand-rev-input.empty-month {
+        background: #f5f5f5;
+        color: #aaa;
+        cursor: default;
+      }
+
+      /* ── Override badge ── */
+      .override-badge {
+        display: none;
+        font-size: 0.7em;
+        color: #f2711c;
+        font-weight: 700;
+        margin-top: 1px;
+      }
+      .brand-rev-input.overridden + .override-flag + .override-badge {
+        display: block;
+      }
+    </style>
+
+    <div class="budget-table-wrap">
+      <table class="ui compact table">
+        <thead>
+          <tr>
+            <th></th>
+            {% for mh in month_headers %}
+            <th class="center aligned">{{ mh.month_label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- ═══════ Vertical Targets (Monthly) ═══════ -->
+          <tr class="section-hdr">
+            <td colspan="{{ month_headers|length|add:1 }}">Vertical Targets (Monthly)</td>
+          </tr>
+
+          <!-- Vertical Revenue Budget -->
+          <tr class="vtarget-row">
+            <td>Vertical Revenue Budget</td>
+            {% for mh in month_headers %}
+            <td class="right aligned">
+              <div class="ui labeled input mini" style="width:140px">
+                <div class="ui label">$</div>
+                <input type="number" name="vert_rev_{{ mh.month_num }}"
+                       value="{{ mh.vert_rev_budget }}"
+                       data-month="{{ mh.month_num }}"
+                       class="vert-rev-input"
+                       step="1" min="0" placeholder="0"
+                       style="text-align:right">
+              </div>
+            </td>
+            {% endfor %}
+          </tr>
+
+          <!-- MTS Target -->
+          <tr class="vtarget-row">
+            <td>MTS Target</td>
+            {% for mh in month_headers %}
+            <td class="right aligned">
+              <div class="ui right labeled input mini" style="width:110px">
+                <input type="number" name="mts_{{ mh.month_num }}"
+                       value="{{ mh.mts_display }}"
+                       step="0.01" min="0" max="100" placeholder="0"
+                       style="text-align:right">
+                <div class="ui label">%</div>
+              </div>
+            </td>
+            {% endfor %}
+          </tr>
+
+          <!-- Cancellation Rate -->
+          <tr class="vtarget-row">
+            <td>Cancellation Rate</td>
+            {% for mh in month_headers %}
+            <td class="right aligned">
+              <div class="ui right labeled input mini" style="width:110px">
+                <input type="number" name="cancel_{{ mh.month_num }}"
+                       value="{{ mh.cancel_display }}"
+                       data-month="{{ mh.month_num }}"
+                       class="cancel-rate-input"
+                       step="0.01" min="0" max="100" placeholder="0"
+                       style="text-align:right">
+                <div class="ui label">%</div>
+              </div>
+            </td>
+            {% endfor %}
+          </tr>
+
+          <!-- Marketing Revenue Budget (computed) -->
+          <tr class="computed-row">
+            <td>
+              Marketing Rev Budget
+              <div style="font-size:0.8em;font-weight:400;color:#888;font-style:normal">
+                Accounts for cancellations
+              </div>
+            </td>
+            {% for mh in month_headers %}
+            <td class="right aligned">
+              <span class="mktg-rev-display" data-month="{{ mh.month_num }}"
+              >{{ mh.marketing_rev_budget|default:"—" }}</span>
+            </td>
+            {% endfor %}
+          </tr>
+
+          <!-- ═══════ Brand Budget Allocation ═══════ -->
+          <tr class="section-hdr">
+            <td colspan="{{ month_headers|length|add:1 }}">
+              Brand Budget Allocation
+              <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.95em;color:#666">
+                — auto-allocated from last year's revenue; override any value
+              </span>
+            </td>
+          </tr>
+
+          {% for br in brand_rows %}
+          <tr class="brand-row" data-brand-name="{{ br.brand.name|lower }}">
+            <td>{{ br.brand.name }}</td>
+            {% for c in br.cells %}
+            <td class="right aligned">
+              <input type="number" name="rev_{{ c.month_num }}_{{ br.brand.id }}"
+                     value="{{ c.revenue_budget }}"
+                     data-month="{{ c.month_num }}" data-brand="{{ br.brand.id }}"
+                     class="brand-rev-input{% if c.manually_overridden %} overridden{% endif %}"
+                     step="1" min="0" placeholder="—">
+              <input type="hidden" name="override_{{ c.month_num }}_{{ br.brand.id }}"
+                     value="{{ c.manually_overridden|yesno:'1,0' }}"
+                     class="override-flag"
+                     data-month="{{ c.month_num }}" data-brand="{{ br.brand.id }}">
+              <span class="override-badge">overridden</span>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:1em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+      <button type="submit" class="ui primary button">
+        <i class="save icon"></i> Save All Budgets
+      </button>
+      <span style="color:#6B7D94;font-size:0.88em">
+        Leave vertical revenue blank to clear a month. Marketing Revenue Budget = Vert Rev &divide; (1 &minus; Cancel Rate).
+      </span>
+    </div>
   </div>
 </form>
 
-{% elif not vertical or not month_obj %}
+<!-- Last-year revenue data for JS auto-allocation -->
+<script id="ly-rev-data" type="application/json">{{ ly_rev_json }}</script>
+<script src="{% static 'dashboard/budgets.js' %}"></script>
+
+{% elif not vertical or not month_headers %}
 <div class="ui message">
   <i class="info circle icon"></i>
-  Select a vertical, year, and month to view or edit budgets.
+  Select a vertical and year to view or edit budgets.
 </div>
 {% endif %}
 

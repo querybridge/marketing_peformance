@@ -348,12 +348,16 @@ def orders_by_brand(window, vertical_id=None, rev_type="net"):
     }
 
 
-def budgets_for_period(window):
+def budgets_for_period(window, rev_type="net"):
     """Monthly budgets prorated to the overlap with *window*.
 
-    Revenue budget is adjusted upward by the brand's cancellation rate:
+    When rev_type="new", the revenue budget is adjusted upward by the
+    brand's cancellation rate so the goal reflects pre-cancellation
+    (marketing) revenue:
       adjusted = revenue_budget / (1 − cancellation_rate)
-    so the goal accounts for expected cancellations.
+
+    When rev_type="net" (default), the raw revenue_budget is used as-is
+    since it already represents the post-cancellation target.
     """
     qs = FactBudget.objects.filter(
         month__date__gte=_month_start(window.start),
@@ -369,10 +373,10 @@ def budgets_for_period(window):
         overlap = max((o_end - o_start).days + 1, 0)
         prorate = Decimal(str(overlap)) / Decimal(str(m_days))
 
-        cancel = b.cancellation_rate or _Z
-        divisor = Decimal("1") - cancel
-        if divisor > _Z:
-            adjusted = b.revenue_budget / divisor
+        if rev_type == "new":
+            cancel = b.cancellation_rate or _Z
+            divisor = Decimal("1") - cancel
+            adjusted = b.revenue_budget / divisor if divisor > _Z else b.revenue_budget
         else:
             adjusted = b.revenue_budget
 
@@ -695,7 +699,7 @@ def brand_table(period, vertical_id=None, rev_type="net"):
     )
     oy = orders_by_brand(yoy_win, vertical_id, rev_type)
 
-    budgets = budgets_for_period(period.current)
+    budgets = budgets_for_period(period.current, rev_type)
 
     brands = DimBrand.objects.select_related("vertical")
     if vertical_id:
@@ -734,7 +738,7 @@ def brand_table(period, vertical_id=None, rev_type="net"):
         rows.append({
             "id": bid,
             "name": b.name,
-            "vertical": b.vertical.name,
+            "vertical": b.vertical.name if b.vertical else "—",
             "spend": cur_spend,
             "spend_cmp": cmp_spend,
             "spend_delta": _pct(cur_spend, cmp_spend),
@@ -770,18 +774,12 @@ def brand_table(period, vertical_id=None, rev_type="net"):
 
 # ═══════════════════════════════════════════════════════════════════════════
 # DRILL TABLE  (sub-brand aggregation)
-# Revenue is allocated to sub-levels by spend share.
+# Revenue uses platform-reported conversion_value (last-click).
 # ═══════════════════════════════════════════════════════════════════════════
 
 
 def drill_table(period, group_by, rev_type="net", **filters):
     brand_id = filters["brand_id"]
-
-    # Brand-level revenue for allocation
-    oc = orders_by_brand(period.current, rev_type=rev_type)
-    op = orders_by_brand(period.compare, rev_type=rev_type)
-    brand_rev_cur = float(oc.get(brand_id, {}).get("revenue", 0))
-    brand_rev_cmp = float(op.get(brand_id, {}).get("revenue", 0))
 
     # Media at requested grain
     if group_by == "source":
@@ -810,9 +808,6 @@ def drill_table(period, group_by, rev_type="net", **filters):
     else:
         return []
 
-    total_spend_cur = sum(float(v.get("spend", 0)) for v in mc.values())
-    total_spend_cmp = sum(float(v.get("spend", 0)) for v in mp.values())
-
     rows = []
     for obj_id, name in objs.items():
         cur = mc.get(obj_id, {})
@@ -823,20 +818,25 @@ def drill_table(period, group_by, rev_type="net", **filters):
         if cur_spend == 0 and cmp_spend == 0:
             continue
 
-        # Spend-weighted revenue allocation
-        cur_rev = (
-            brand_rev_cur * (cur_spend / total_spend_cur)
-            if total_spend_cur
-            else 0
-        )
-        cmp_rev = (
-            brand_rev_cmp * (cmp_spend / total_spend_cmp)
-            if total_spend_cmp
-            else 0
-        )
+        # Platform-reported last-click revenue (conversion_value)
+        cur_rev = float(cur.get("conv_value", 0))
+        cmp_rev = float(cmp.get("conv_value", 0))
 
         cur_mts = _div(cur_spend, cur_rev)
         cmp_mts = _div(cmp_spend, cmp_rev)
+
+        cur_clicks = int(cur.get("clicks", 0))
+        cmp_clicks = int(cmp.get("clicks", 0))
+        cur_conversions = int(cur.get("conversions", 0))
+        cmp_conversions = int(cmp.get("conversions", 0))
+
+        # Source Conversion Rate = conversions / clicks (0 when clicks = 0)
+        cur_src_cvr = cur_conversions / cur_clicks if cur_clicks else 0
+        cmp_src_cvr = cmp_conversions / cmp_clicks if cmp_clicks else 0
+
+        # Avg Conversion Value = conversion_value / conversions (0 when conversions = 0)
+        cur_avg_cv = cur_rev / cur_conversions if cur_conversions else 0
+        cmp_avg_cv = cmp_rev / cmp_conversions if cmp_conversions else 0
 
         rows.append({
             "id": obj_id,
@@ -851,8 +851,12 @@ def drill_table(period, group_by, rev_type="net", **filters):
                 if cur_mts is not None and cmp_mts is not None
                 else None
             ),
-            "clicks": cur.get("clicks", 0),
-            "conversions": cur.get("conversions", 0),
+            "clicks": cur_clicks,
+            "conversions": cur_conversions,
+            "src_cvr": round(cur_src_cvr, 4),
+            "src_cvr_delta": _pct(cur_src_cvr, cmp_src_cvr),
+            "avg_conv_value": round(cur_avg_cv, 2),
+            "avg_conv_value_delta": _pct(cur_avg_cv, cmp_avg_cv),
         })
 
     return sorted(rows, key=lambda r: r["spend"], reverse=True)
@@ -868,11 +872,28 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
 
     Label precision follows the period filter:
       - week presets  → daily, labelled "Mon 2/3"
-      - month presets → daily, labelled "3" (day of month)
+      - month presets → daily, labelled "02/01" (MM/DD)
       - quarter       → aggregated by month, labelled "Jan"
       - custom        → daily, labelled "2/3"
     """
     monthly = preset == "this_quarter"
+
+    # For "this_month", cap chart data at yesterday — today's data is
+    # incomplete and the extra pacing day causes label collisions.
+    if preset == "this_month":
+        yesterday = period.current.end - timedelta(days=1)
+        if yesterday >= period.current.start:
+            chart_current = DateWindow(period.current.start, yesterday)
+            chart_compare = DateWindow(
+                period.compare.start,
+                period.compare.end - timedelta(days=1),
+            )
+        else:
+            chart_current = period.current
+            chart_compare = period.compare
+    else:
+        chart_current = period.current
+        chart_compare = period.compare
 
     def _build(window):
         kw = {}
@@ -917,7 +938,6 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
                 if key not in buckets:
                     buckets[key] = {
                         "spend": 0, "revenue": 0, "orders": 0, "clicks": 0,
-                        "date": d,
                     }
                 m = media_days.get(d, {})
                 o = order_days.get(d, {})
@@ -925,23 +945,13 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
                 buckets[key]["revenue"] += float(o.get("r", 0))
                 buckets[key]["orders"] += o.get("o", 0)
                 buckets[key]["clicks"] += m.get("c", 0)
-            return [
-                {
-                    "date": v["date"].isoformat(),
-                    "day": date(k[0], k[1], 1).strftime("%b"),
-                    "spend": v["spend"],
-                    "revenue": v["revenue"],
-                    "orders": v["orders"],
-                    "clicks": v["clicks"],
-                }
-                for k, v in sorted(buckets.items())
-            ]
+            return buckets
 
         def _label(d):
             if preset in ("this_week", "last_week"):
                 return d.strftime("%a %-m/%-d")
             if preset in ("this_month", "last_month"):
-                return str(d.day)
+                return d.strftime("%m/%d")
             return d.strftime("%-m/%-d")
 
         return [
@@ -956,4 +966,37 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
             for d in all_dates
         ]
 
-    return {"current": _build(period.current), "compare": _build(period.compare)}
+    if monthly:
+        # Always emit exactly 3 rows — one per quarter month.
+        q_start = period.current.start
+        q_month = ((q_start.month - 1) // 3) * 3 + 1
+        q_year = q_start.year
+        quarter_slots = [(q_year, q_month + i) for i in range(3)]
+        quarter_labels = [date(y, m, 1).strftime("%b") for y, m in quarter_slots]
+        _zero = {"spend": 0, "revenue": 0, "orders": 0, "clicks": 0}
+
+        cur_buckets = _build(period.current)
+        cmp_buckets = _build(period.compare)
+
+        # Current: keyed by quarter months, zero-fill missing months
+        current = []
+        for (y, m), label in zip(quarter_slots, quarter_labels):
+            b = cur_buckets.get((y, m), _zero)
+            current.append({"date": date(y, m, 1).isoformat(), "day": label, **b})
+
+        # Compare: positionally aligned to the same 3 slots
+        cmp_sorted = sorted(cmp_buckets.keys())
+        compare = []
+        for i, label in enumerate(quarter_labels):
+            if i < len(cmp_sorted):
+                k = cmp_sorted[i]
+                b = cmp_buckets[k]
+                d_iso = date(k[0], k[1], 1).isoformat()
+            else:
+                b = _zero
+                d_iso = date(quarter_slots[i][0], quarter_slots[i][1], 1).isoformat()
+            compare.append({"date": d_iso, "day": label, **b})
+
+        return {"current": current, "compare": compare}
+
+    return {"current": _build(chart_current), "compare": _build(chart_compare)}

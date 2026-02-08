@@ -20,6 +20,9 @@
       <a class="item" href="{% url 'dashboard:budgets' %}">Budgets</a>
       <a class="item" href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>
       <div class="right menu">
+        <a class="item" href="{% url 'dashboard:help' %}">
+          <i class="help circle icon"></i> Help
+        </a>
         <a class="item" id="pdf-link" href="{% url 'dashboard:export_pdf' %}?{{ filter_qs|default:'' }}">
           <i class="file pdf outline icon"></i> PDF
         </a>
@@ -38,6 +41,7 @@
       <a href="{% url 'dashboard:data_dictionary' %}" style="color:#9BAFC4;margin:0 1em">Data Dictionary</a>
       <a href="{% url 'dashboard:alert_spec' %}" style="color:#9BAFC4;margin:0 1em">Alert Rules</a>
       <a href="{% url 'dashboard:match_campaigns' %}" style="color:#9BAFC4;margin:0 1em">Match Campaigns</a>
+      <a href="{% url 'dashboard:help' %}" style="color:#9BAFC4;margin:0 1em">Help</a>
     </div>
   </footer>
 

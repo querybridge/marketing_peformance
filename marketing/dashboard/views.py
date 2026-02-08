@@ -10,9 +10,10 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from . import services
+from django.db.models import Sum
 from .models import (
     DimBrand, DimCampaign, DimCampaignType, DimDate, DimSource, DimVertical,
-    FactBudget, FactMediaDaily,
+    FactBudget, FactMediaDaily, FactOrdersDaily, FactVerticalBudget,
 )
 
 
@@ -280,6 +281,32 @@ METRICS_DICT = [
         "nulls": "NULL when clicks = 0. Display as '—'.",
         "display": "Table only",
     },
+    {
+        "name": "Source Conversion Rate",
+        "definition": "Platform-reported conversions divided by ad platform clicks. "
+                       "Measures what fraction of clicks convert according to the platform. "
+                       "Only shown below brand level (Source, Campaign Type, Campaign).",
+        "source": "Calculated (platform data)",
+        "grain": "Below brand only (Source / Campaign Type / Campaign)",
+        "additive": "No — ratio",
+        "rollup": "SUM(conversions) ÷ SUM(clicks)  "
+                  "(recompute at each rollup level, never average pre-computed rates)",
+        "nulls": "0 when clicks = 0. Not NULL — forced to zero.",
+        "display": "Drill-down table only",
+    },
+    {
+        "name": "Avg Conversion Value",
+        "definition": "Platform-reported conversion_value divided by platform-reported conversions. "
+                       "Average monetary value per conversion as attributed by the platform. "
+                       "Only shown below brand level (Source, Campaign Type, Campaign).",
+        "source": "Calculated (platform data)",
+        "grain": "Below brand only (Source / Campaign Type / Campaign)",
+        "additive": "No — ratio",
+        "rollup": "SUM(conversion_value) ÷ SUM(conversions)  "
+                  "(recompute at each rollup level, never average pre-computed values)",
+        "nulls": "0 when conversions = 0. Not NULL — forced to zero.",
+        "display": "Drill-down table only",
+    },
     # ── CSV-uploaded order / revenue data ─────────────────────
     {
         "name": "Orders",
@@ -317,17 +344,18 @@ METRICS_DICT = [
     },
     {
         "name": "Revenue",
-        "definition": "The active revenue figure used in MTS, AOV, and all delta calculations. "
-                       "Equals New Revenue or Net Revenue depending on the Revenue toggle. "
-                       "Below brand level (Source, Campaign Type, Campaign), revenue is "
-                       "allocated proportionally by spend share because order data exists "
-                       "only at brand × day grain.",
-        "source": "CSV upload + toggle",
-        "grain": "brand × day (native); spend-allocated below brand",
-        "additive": "Yes at brand+; allocated below brand",
+        "definition": "At brand level: the active revenue figure (New or Net) from CSV upload, "
+                       "used in MTS, AOV, and all delta calculations. "
+                       "Below brand level (Source, Campaign Type, Campaign): platform-reported "
+                       "last-click conversion_value from FactMediaDaily. Sub-brand revenue will "
+                       "generally not sum to brand-level revenue (different data sources).",
+        "source": "CSV upload (brand); platform conversion_value (below brand)",
+        "grain": "brand × day (native); campaign × day (below brand)",
+        "additive": "Yes",
         "rollup": "SUM(selected_revenue_field) at brand level.  "
-                  "Below brand: brand_revenue × (entity_spend ÷ brand_spend).",
-        "nulls": "0 when no CSV data uploaded. MTS and AOV become NULL.",
+                  "Below brand: SUM(conversion_value).",
+        "nulls": "0 when no CSV data uploaded (brand) or no platform data (sub-brand). "
+                 "MTS and AOV become NULL.",
         "display": "Table + Chart",
     },
     # ── Calculated business metrics ───────────────────────────
@@ -599,11 +627,11 @@ def export_pdf(request):
 # Budgets
 # ───────────────────────────────────────────────────────────────────────────
 
-_MONTH_NAMES = [
-    (1, "Jan"), (2, "Feb"), (3, "Mar"), (4, "Apr"),
-    (5, "May"), (6, "Jun"), (7, "Jul"), (8, "Aug"),
-    (9, "Sep"), (10, "Oct"), (11, "Nov"), (12, "Dec"),
-]
+_MONTH_LABELS = {
+    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr",
+    5: "May", 6: "Jun", 7: "Jul", 8: "Aug",
+    9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+}
 
 
 def budgets(request):
@@ -614,121 +642,231 @@ def budgets(request):
 
     selected_vertical = request.GET.get("vertical") or request.POST.get("vertical")
     selected_year = request.GET.get("year") or request.POST.get("year")
-    selected_month = request.GET.get("month") or request.POST.get("month")
 
     vertical = None
-    month_obj = None
     brands = []
-    rows = []
+    brand_rows = []
+    month_headers = []
     saved = False
-    vertical_cancel_rate = None
+    ly_rev_json = "{}"
 
     if selected_vertical:
         vertical = DimVertical.objects.filter(id=selected_vertical).first()
 
-    if selected_year and selected_month:
-        try:
-            target = date(int(selected_year), int(selected_month), 1)
-        except (ValueError, TypeError):
-            target = None
-        if target:
-            month_obj = DimDate.objects.filter(date=target).first()
+    if vertical and selected_year:
+        year = int(selected_year)
+        brands = list(DimBrand.objects.filter(vertical=vertical).order_by("name"))
 
-    mts_display = ""
+        # 12 first-of-month DimDate rows for this year
+        month_objs = list(
+            DimDate.objects.filter(year=year, day_of_month=1).order_by("month")
+        )
 
-    if vertical and month_obj:
-        brands = DimBrand.objects.filter(vertical=vertical).order_by("name")
-        existing = {
-            fb.brand_id: fb
-            for fb in FactBudget.objects.filter(
-                brand__vertical=vertical, month=month_obj,
-            )
-        }
+        # Existing brand-level budgets for this vertical + year
+        existing = {}
+        for fb in FactBudget.objects.filter(
+            brand__vertical=vertical, month__in=month_objs,
+        ).select_related("brand", "month"):
+            existing[(fb.brand_id, fb.month_id)] = fb
 
-        # Derive current MTS from any existing budget in this vertical/month
-        if existing:
-            ratio = next(iter(existing.values())).mts_budget
-            mts_display = round(ratio * 100, 2)
+        # Existing vertical-level targets
+        vert_targets = {}
+        for vb in FactVerticalBudget.objects.filter(
+            vertical=vertical, month__in=month_objs,
+        ).select_related("month"):
+            vert_targets[vb.month_id] = vb
 
+        # Last year's revenue by brand+month (for auto-allocation defaults)
+        prior_year = year - 1
+        ly_rev = {}
+        for row in (
+            FactOrdersDaily.objects
+            .filter(brand__vertical=vertical, date__year=prior_year)
+            .values("brand_id", "date__month")
+            .annotate(revenue=Sum("net_revenue"))
+        ):
+            ly_rev[(row["brand_id"], row["date__month"])] = float(row["revenue"])
+
+        # Last year's cancellation rates
+        ly_cancel = {}
+        for fb in FactBudget.objects.filter(
+            brand__vertical=vertical, month__year=prior_year,
+        ):
+            ly_cancel[(fb.brand_id, fb.month.month)] = fb.cancellation_rate
+
+        # ── POST: bulk save all 12 months ──
         if request.method == "POST":
-            raw_pct = request.POST.get("mts_pct", "").strip()
-            try:
-                mts_val = Decimal(raw_pct) / 100 if raw_pct else None
-            except InvalidOperation:
-                mts_val = None
-
-            for brand in brands:
-                raw_rev = request.POST.get(f"rev_{brand.id}", "").strip()
-                raw_cancel = request.POST.get(f"cancel_{brand.id}", "").strip()
+            for m_obj in month_objs:
+                mn = m_obj.month
+                raw_mts = request.POST.get(f"mts_{mn}", "").strip()
+                raw_vert_rev = request.POST.get(f"vert_rev_{mn}", "").strip()
+                raw_cancel = request.POST.get(f"cancel_{mn}", "").strip()
                 try:
-                    rev_val = Decimal(raw_rev) if raw_rev else None
+                    mts_val = Decimal(raw_mts) / 100 if raw_mts else None
                 except InvalidOperation:
-                    continue
+                    mts_val = None
+                try:
+                    vert_rev_val = Decimal(raw_vert_rev) if raw_vert_rev else None
+                except InvalidOperation:
+                    vert_rev_val = None
                 try:
                     cancel_val = Decimal(raw_cancel) / 100 if raw_cancel else Decimal("0")
                 except InvalidOperation:
                     cancel_val = Decimal("0")
 
-                if rev_val is not None and mts_val is not None:
-                    FactBudget.objects.update_or_create(
-                        brand=brand,
-                        month=month_obj,
+                # Always save vertical-level targets
+                if vert_rev_val is not None and mts_val is not None:
+                    FactVerticalBudget.objects.update_or_create(
+                        vertical=vertical, month=m_obj,
                         defaults={
-                            "revenue_budget": rev_val,
+                            "revenue_budget": vert_rev_val,
                             "mts_budget": mts_val,
                             "cancellation_rate": cancel_val,
                         },
                     )
-                elif brand.id in existing and rev_val is None:
-                    existing[brand.id].delete()
+                elif vert_rev_val is None:
+                    FactVerticalBudget.objects.filter(
+                        vertical=vertical, month=m_obj,
+                    ).delete()
+
+                # Distribute to brands if any exist
+                if vert_rev_val is not None and mts_val is not None and brands:
+                    # Collect manually-overridden brand revenues
+                    overrides = {}
+                    for brand in brands:
+                        if request.POST.get(f"override_{mn}_{brand.id}") == "1":
+                            raw_rev = request.POST.get(f"rev_{mn}_{brand.id}", "").strip()
+                            try:
+                                overrides[brand.id] = Decimal(raw_rev) if raw_rev else Decimal("0")
+                            except InvalidOperation:
+                                overrides[brand.id] = Decimal("0")
+
+                    override_total = sum(overrides.values())
+                    remaining = vert_rev_val - override_total
+                    auto_brands = [b for b in brands if b.id not in overrides]
+                    total_ly_auto = sum(ly_rev.get((b.id, mn), 0) for b in auto_brands)
+
+                    # Save overridden brands
+                    for brand in brands:
+                        if brand.id in overrides:
+                            FactBudget.objects.update_or_create(
+                                brand=brand, month=m_obj,
+                                defaults={
+                                    "revenue_budget": overrides[brand.id],
+                                    "mts_budget": mts_val,
+                                    "cancellation_rate": cancel_val,
+                                    "manually_overridden": True,
+                                },
+                            )
+
+                    # Distribute remaining to auto-allocated brands
+                    allocated = Decimal("0")
+                    for i, brand in enumerate(auto_brands):
+                        if i == len(auto_brands) - 1:
+                            rev_val = remaining - allocated
+                        else:
+                            if total_ly_auto > 0:
+                                share = Decimal(str(ly_rev.get((brand.id, mn), 0))) / Decimal(str(total_ly_auto))
+                            else:
+                                share = Decimal("1") / Decimal(str(len(auto_brands)))
+                            rev_val = (remaining * share).quantize(Decimal("1"))
+                            allocated += rev_val
+
+                        FactBudget.objects.update_or_create(
+                            brand=brand, month=m_obj,
+                            defaults={
+                                "revenue_budget": rev_val,
+                                "mts_budget": mts_val,
+                                "cancellation_rate": cancel_val,
+                                "manually_overridden": False,
+                            },
+                        )
+                elif vert_rev_val is None:
+                    # Clear brand budgets for this month when vert rev is blank
+                    FactBudget.objects.filter(
+                        brand__in=brands, month=m_obj,
+                    ).delete()
 
             saved = True
-            mts_display = Decimal(raw_pct) if raw_pct else ""
-            # Refresh after save
-            existing = {
-                fb.brand_id: fb
-                for fb in FactBudget.objects.filter(
-                    brand__vertical=vertical, month=month_obj,
-                )
-            }
+            # Refresh existing after save
+            existing = {}
+            for fb in FactBudget.objects.filter(
+                brand__vertical=vertical, month__in=month_objs,
+            ).select_related("brand", "month"):
+                existing[(fb.brand_id, fb.month_id)] = fb
+            vert_targets = {}
+            for vb in FactVerticalBudget.objects.filter(
+                vertical=vertical, month__in=month_objs,
+            ).select_related("month"):
+                vert_targets[vb.month_id] = vb
 
+        # ── Build brand_rows: one entry per brand, each with 12 month cells ──
+        brand_rows = []
         for brand in brands:
-            fb = existing.get(brand.id)
-            cancel_display = round(fb.cancellation_rate * 100, 2) if fb and fb.cancellation_rate else ""
-            rows.append({
+            cells = []
+            for m_obj in month_objs:
+                fb = existing.get((brand.id, m_obj.id))
+                cells.append({
+                    "month_num": m_obj.month,
+                    "revenue_budget": int(round(fb.revenue_budget)) if fb and fb.revenue_budget else "",
+                    "manually_overridden": fb.manually_overridden if fb else False,
+                })
+            brand_rows.append({
                 "brand": brand,
-                "revenue_budget": fb.revenue_budget if fb else "",
-                "cancellation_rate": cancel_display,
+                "cells": cells,
             })
 
-        # Vertical-level aggregate cancellation rate (revenue-weighted average)
-        total_rev = sum(
-            float(fb.revenue_budget) for fb in existing.values()
-            if fb.revenue_budget
-        )
-        if total_rev > 0:
-            weighted = sum(
-                float(fb.cancellation_rate or 0) * float(fb.revenue_budget)
-                for fb in existing.values()
-                if fb.revenue_budget
-            )
-            vertical_cancel_rate = round(weighted / total_rev * 100, 2)
-        else:
-            vertical_cancel_rate = None
+        # ── Build month_headers from vertical-level targets ──
+        month_headers = []
+        for m_obj in month_objs:
+            mn = m_obj.month
+            vb = vert_targets.get(m_obj.id)
+            mts_display = ""
+            cancel_display = ""
+            vert_rev_int = ""
+            if vb:
+                vert_rev_int = int(round(vb.revenue_budget))
+                mts_display = round(vb.mts_budget * 100, 2)
+                if vb.cancellation_rate:
+                    cancel_display = round(vb.cancellation_rate * 100, 2)
+
+            # Marketing Revenue Budget = Vert Rev / (1 - Cancel Rate)
+            mktg_rev = ""
+            if vert_rev_int and cancel_display:
+                cancel_frac = float(cancel_display) / 100
+                if cancel_frac < 1:
+                    mktg_rev = f"${int(round(float(vert_rev_int) / (1 - cancel_frac))):,}"
+
+            month_headers.append({
+                "month_num": mn,
+                "month_label": _MONTH_LABELS[mn],
+                "month_obj": m_obj,
+                "mts_display": mts_display,
+                "cancel_display": cancel_display,
+                "vert_rev_budget": vert_rev_int,
+                "marketing_rev_budget": mktg_rev,
+            })
+
+        # Build ly_rev_json for JS auto-allocation: { "month_num": { "brand_id": revenue }, ... }
+        ly_rev_serializable = {}
+        for (brand_id, month_num), revenue in ly_rev.items():
+            mn_str = str(month_num)
+            if mn_str not in ly_rev_serializable:
+                ly_rev_serializable[mn_str] = {}
+            ly_rev_serializable[mn_str][str(brand_id)] = revenue
+        ly_rev_json = json.dumps(ly_rev_serializable)
 
     ctx = {
         "verticals": verticals,
         "year_choices": year_choices,
-        "month_choices": _MONTH_NAMES,
         "selected_vertical": int(selected_vertical) if selected_vertical else None,
         "selected_year": int(selected_year) if selected_year else None,
-        "selected_month": int(selected_month) if selected_month else None,
         "vertical": vertical,
-        "month_obj": month_obj,
-        "rows": rows,
-        "mts_display": mts_display,
-        "vertical_cancel_rate": vertical_cancel_rate,
+        "brands": brands,
+        "brand_rows": brand_rows,
+        "month_headers": month_headers,
         "saved": saved,
+        "ly_rev_json": ly_rev_json,
     }
     return render(request, "dashboard/budgets.html", ctx)
 
@@ -794,6 +932,7 @@ def verticals(request):
 
 def brands(request):
     error = None
+    upload_summary = None
     selected_vertical = request.GET.get("vertical") or request.POST.get("vertical")
 
     if request.method == "POST":
@@ -802,30 +941,42 @@ def brands(request):
         if action == "add":
             name = request.POST.get("name", "").strip()
             vid = request.POST.get("vertical_id", "").strip()
-            if name and vid:
-                vertical = get_object_or_404(DimVertical, id=vid)
-                slug = slugify(name)
-                if DimBrand.objects.filter(name=name, vertical=vertical).exists():
-                    error = f'Brand "{name}" already exists in {vertical.name}.'
+            raw_bid = request.POST.get("brand_id", "").strip()
+            brand_id_val = int(raw_bid) if raw_bid else None
+            if name:
+                vertical = get_object_or_404(DimVertical, id=vid) if vid else None
+                dup = DimBrand.objects.filter(name=name)
+                if vertical:
+                    dup = dup.filter(vertical=vertical)
+                if dup.exists():
+                    error = f'Brand "{name}" already exists.'
+                elif brand_id_val is not None and DimBrand.objects.filter(brand_id=brand_id_val, vertical=vertical).exists():
+                    error = f'Brand ID {brand_id_val} is already in use in this vertical.'
                 else:
-                    DimBrand.objects.create(name=name, slug=slug, vertical=vertical)
-                    return redirect(f"{request.path}?vertical={vid}")
+                    DimBrand.objects.create(
+                        name=name, slug=slugify(name),
+                        vertical=vertical, brand_id=brand_id_val,
+                    )
+                    return redirect(f"{request.path}?vertical={vid}" if vid else request.path)
 
         elif action == "edit":
             bid = request.POST.get("id")
             name = request.POST.get("name", "").strip()
             vid = request.POST.get("vertical_id", "").strip()
-            if bid and name and vid:
+            raw_bid = request.POST.get("brand_id", "").strip()
+            brand_id_val = int(raw_bid) if raw_bid else None
+            if bid and name:
                 b = get_object_or_404(DimBrand, id=bid)
-                vertical = get_object_or_404(DimVertical, id=vid)
-                if DimBrand.objects.filter(name=name, vertical=vertical).exclude(id=bid).exists():
-                    error = f'Brand "{name}" already exists in {vertical.name}.'
+                vertical = get_object_or_404(DimVertical, id=vid) if vid else None
+                if brand_id_val is not None and DimBrand.objects.filter(brand_id=brand_id_val, vertical=vertical).exclude(id=bid).exists():
+                    error = f'Brand ID {brand_id_val} is already in use in this vertical.'
                 else:
                     b.name = name
                     b.slug = slugify(name)
                     b.vertical = vertical
+                    b.brand_id = brand_id_val
                     b.save()
-                    return redirect(f"{request.path}?vertical={selected_vertical or vid}")
+                    return redirect(f"{request.path}?vertical={selected_vertical or vid}" if (selected_vertical or vid) else request.path)
 
         elif action == "delete":
             bid = request.POST.get("id")
@@ -836,7 +987,62 @@ def brands(request):
                 else:
                     vid = b.vertical_id
                     b.delete()
-                    return redirect(f"{request.path}?vertical={vid}")
+                    if vid:
+                        return redirect(f"{request.path}?vertical={vid}")
+                    return redirect(request.path)
+
+        elif action == "upload_brands":
+            csv_file = request.FILES.get("brand_csv")
+            if csv_file:
+                raw = csv_file.read()
+                try:
+                    text = raw.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    text = raw.decode("latin-1")
+                reader = csv.reader(io.StringIO(text))
+                headers = [h.strip().lower() for h in next(reader)]
+
+                name_idx = next((i for i, h in enumerate(headers) if h in ("brand_name", "brand", "name")), None)
+                bid_idx = next((i for i, h in enumerate(headers) if h in ("brand_id", "id")), None)
+                vert_idx = next((i for i, h in enumerate(headers) if h in ("vertical", "vertical_name")), None)
+
+                if name_idx is None or bid_idx is None:
+                    error = "CSV must have 'brand_name' and 'brand_id' columns."
+                else:
+                    created_count = 0
+                    updated_count = 0
+                    for row in reader:
+                        if not any(cell.strip() for cell in row):
+                            continue
+                        bname = row[name_idx].strip()
+                        raw_bid = row[bid_idx].strip()
+                        if not bname or not raw_bid:
+                            continue
+                        try:
+                            bid_val = int(raw_bid)
+                        except ValueError:
+                            continue
+
+                        vert = None
+                        if vert_idx is not None and vert_idx < len(row) and row[vert_idx].strip():
+                            vert, _ = DimVertical.objects.get_or_create(
+                                name=row[vert_idx].strip(),
+                                defaults={"slug": slugify(row[vert_idx].strip())},
+                            )
+
+                        brand, is_new = DimBrand.objects.update_or_create(
+                            brand_id=bid_val,
+                            vertical=vert,
+                            defaults={
+                                "name": bname,
+                                "slug": slugify(bname),
+                            },
+                        )
+                        if is_new:
+                            created_count += 1
+                        else:
+                            updated_count += 1
+                    upload_summary = f"Created {created_count}, updated {updated_count} brands."
 
     all_verticals = DimVertical.objects.all()
     vertical = None
@@ -864,6 +1070,7 @@ def brands(request):
         "vertical": vertical,
         "rows": brand_rows,
         "error": error,
+        "upload_summary": upload_summary,
     })
 
 
@@ -909,7 +1116,27 @@ COLUMN_MAPS = {
         "clicks":           "Link clicks",
         "cost":             "Amount spent",
         "conversions":      "Purchases",
-        "conversion_value": "Purchase value",
+        "conversion_value": "Purchase conversion value",
+    },
+    "amazon-marketplace-sponsored": {
+        "campaign":         "Campaign name",
+        "external_id":      "Campaign ID",
+        "campaign_type":    "Campaign type",
+        "date":             "Day",
+        "impressions":      "Impressions",
+        "clicks":           "Clicks",
+        "cost":             "Spend",
+        "conversions":      "Orders",
+        "conversion_value": "Sales",
+    },
+    "amazon-marketplace-feed": {
+        "campaign":         "Campaign name",
+        "external_id":      "Campaign ID",
+        "campaign_type":    "Campaign type",
+        "date":             "Day",
+        "clicks":           "Sessions",
+        "conversions":      "Orders",
+        "conversion_value": "Sales",
     },
 }
 
@@ -920,10 +1147,11 @@ _GENERIC_NAMES = {
     "campaign_type":    ["campaign type", "campaign_type", "type"],
     "date":             ["date", "day", "time period", "report date"],
     "impressions":      ["impressions", "impr.", "impr"],
-    "clicks":           ["clicks", "link clicks"],
+    "clicks":           ["clicks", "link clicks", "sessions"],
     "cost":             ["cost", "spend", "amount spent"],
-    "conversions":      ["conversions", "purchases", "conv."],
+    "conversions":      ["conversions", "purchases", "conv.", "orders"],
     "conversion_value": ["conversion value", "conv. value", "purchase value",
+                         "purchase conversion value", "sales",
                          "revenue", "conversion_value"],
     "impression_share": ["impression share", "search impr. share",
                          "impression share %", "impr. share"],
@@ -994,11 +1222,18 @@ def _parse_int(val, default=0):
 
 
 def _parse_share(val):
-    """Parse share values: '0.45', '45%', '< 10%' → Decimal or None."""
+    """Parse share values: '0.45', '45%', '< 10%' → Decimal or None.
+
+    Rules:
+    - "< 10%" → interpreted as 10% (0.10)
+    - Any parsed share below 10% is floored to 0.10
+    - Any parsed share above 100% is capped at 1.00
+    - Blank / "—" / "--" → None
+    """
     if not val or not isinstance(val, str):
         return None
     val = val.strip()
-    if val in ("--", "N/A", "n/a", ""):
+    if val in ("--", "—", "N/A", "n/a", ""):
         return None
     val = val.replace("<", "").replace(">", "").strip()
     had_pct = "%" in val
@@ -1009,11 +1244,48 @@ def _parse_share(val):
         return None
     if had_pct or d > 1:
         d = d / 100
+    # Floor at 10%, cap at 100%
+    if d < Decimal("0.10"):
+        d = Decimal("0.10")
+    if d > Decimal("1.00"):
+        d = Decimal("1.00")
     return d
+
+
+def _detect_header_row(lines, source_slug):
+    """Scan the first ~10 lines for the actual header row.
+
+    Google Ads exports include metadata rows before the real header.
+    We look for a line containing key column names from the source mapping
+    (or generic fallbacks).  Returns (header_row_index, header_fields) or
+    (None, None) if not found.
+    """
+    # Build a set of lowercase marker column names to search for.
+    # We require at least a "campaign" column + a "date" column + a "cost" column.
+    markers = set()
+    if source_slug in COLUMN_MAPS:
+        mapping = COLUMN_MAPS[source_slug]
+        for field in ("campaign", "date", "cost"):
+            if field in mapping:
+                markers.add(mapping[field].lower())
+    if not markers:
+        # Fallback: generic markers
+        markers = {"campaign", "day", "cost"}
+
+    for idx, line in enumerate(lines[:10]):
+        # Parse this line as CSV to handle quoted fields
+        parsed = list(csv.reader([line]))
+        if not parsed or not parsed[0]:
+            continue
+        lower_cells = {c.strip().lower() for c in parsed[0]}
+        if markers <= lower_cells:
+            return idx, parsed[0]
+    return None, None
 
 
 def upload_csv(request):
     sources = DimSource.objects.all()
+    verticals = DimVertical.objects.all()
 
     # Build column info for JS hints
     column_info = {}
@@ -1022,6 +1294,7 @@ def upload_csv(request):
 
     ctx = {
         "sources": sources,
+        "verticals": verticals,
         "column_info_json": json.dumps(column_info),
         "error": None,
         "summary": None,
@@ -1031,17 +1304,28 @@ def upload_csv(request):
         return render(request, "dashboard/upload.html", ctx)
 
     # ── Validate required fields ──────────────────────────────────────
+    vertical_id = request.POST.get("vertical")
     source_id = request.POST.get("source")
     csv_file = request.FILES.get("csv_file")
+    amazon_type = request.POST.get("amazon_type", "").strip()
 
-    if not all([source_id, csv_file]):
-        ctx["error"] = "All fields are required: source and CSV file."
+    if not all([vertical_id, source_id, csv_file]):
+        ctx["error"] = "All fields are required: vertical, source, and CSV file."
+        return render(request, "dashboard/upload.html", ctx)
+
+    vertical = DimVertical.objects.filter(id=vertical_id).first()
+    if not vertical:
+        ctx["error"] = "Invalid vertical selection."
         return render(request, "dashboard/upload.html", ctx)
 
     source = DimSource.objects.filter(id=source_id).first()
 
     if not source:
         ctx["error"] = "Invalid source selection."
+        return render(request, "dashboard/upload.html", ctx)
+
+    if source.slug == "amazon-marketplace" and amazon_type not in ("sponsored", "feed"):
+        ctx["error"] = "Please select an Amazon Type (Sponsored Ads or Feed-based Listings)."
         return render(request, "dashboard/upload.html", ctx)
 
     # ── Decode CSV ────────────────────────────────────────────────────
@@ -1051,26 +1335,52 @@ def upload_csv(request):
     except UnicodeDecodeError:
         text = raw.decode("latin-1")
 
-    reader = csv.reader(io.StringIO(text))
-    try:
-        headers = next(reader)
-    except StopIteration:
+    all_lines = text.splitlines()
+    if not all_lines:
         ctx["error"] = "The CSV file is empty."
         return render(request, "dashboard/upload.html", ctx)
 
-    col_idx = _build_column_index(headers, source.slug)
+    # For Amazon, use composite slug to select the right column mapping
+    lookup_slug = source.slug
+    if source.slug == "amazon-marketplace" and amazon_type:
+        lookup_slug = f"amazon-marketplace-{amazon_type}"
 
-    # Verify required columns
-    missing = []
-    for req in ("campaign", "date", "cost"):
-        if req not in col_idx:
-            missing.append(req)
+    # ── Auto-detect header row (handles Google Ads metadata rows) ─────
+    header_row_idx, headers = _detect_header_row(all_lines, lookup_slug)
+    metadata_rows_skipped = 0
+
+    if header_row_idx is not None:
+        metadata_rows_skipped = header_row_idx
+        data_lines = all_lines[header_row_idx + 1:]
+    else:
+        # Fallback: treat first row as header (original behavior)
+        parsed_first = list(csv.reader([all_lines[0]]))
+        headers = parsed_first[0] if parsed_first else []
+        data_lines = all_lines[1:]
+
+    col_idx = _build_column_index(headers, lookup_slug)
+
+    # Verify required columns — cost is optional for Amazon feed-based listings
+    is_amazon_feed = source.slug == "amazon-marketplace" and amazon_type == "feed"
+    requires_clicks = source.slug in ("meta-ads", "amazon-marketplace")
+    required = ["campaign", "date", "conversions", "conversion_value"]
+    if not is_amazon_feed:
+        required.append("cost")
+    if requires_clicks:
+        required.append("clicks")
+    missing = [req for req in required if req not in col_idx]
     if missing:
         ctx["error"] = f"Could not find required columns: {', '.join(missing)}. Found headers: {', '.join(headers)}"
         return render(request, "dashboard/upload.html", ctx)
 
-    # ── Pre-load campaign lookups ─────────────────────────────────────
-    source_campaigns = DimCampaign.objects.filter(source=source).select_related("brand")
+    reader = csv.reader(io.StringIO("\n".join(data_lines)))
+
+    # ── Pre-load campaign lookups (scoped to vertical + source) ──────
+    source_campaigns = (
+        DimCampaign.objects
+        .filter(source=source, brand__vertical=vertical)
+        .select_related("brand")
+    )
     campaigns_by_ext_id = {}
     campaigns_by_name = {}
     for c in source_campaigns:
@@ -1083,12 +1393,9 @@ def upload_csv(request):
         ct.name.lower(): ct for ct in DimCampaignType.objects.all()
     }
 
-    # Default brand for auto-created campaigns
-    unknown_vertical, _ = DimVertical.objects.get_or_create(
-        slug="unknown", defaults={"name": "Unknown"},
-    )
+    # Default brand for auto-created campaigns (scoped to selected vertical)
     unknown_brand, _ = DimBrand.objects.get_or_create(
-        slug="unknown", vertical=unknown_vertical,
+        slug="unknown", vertical=vertical,
         defaults={"name": "Unknown"},
     )
 
@@ -1105,7 +1412,9 @@ def upload_csv(request):
             return None
         return row[idx]
 
-    for row_num, row in enumerate(reader, start=2):
+    # Row numbers reference the original file (1-indexed): metadata + header + data
+    data_start_line = metadata_rows_skipped + 2  # +1 for header, +1 for 1-indexing
+    for row_num, row in enumerate(reader, start=data_start_line):
         if not any(cell.strip() for cell in row):
             continue  # skip blank rows
 
@@ -1146,13 +1455,39 @@ def upload_csv(request):
                     types_by_name[fallback] = ctype
                     types_created += 1
 
+            # Auto-assign brand via brand_id prefix (e.g. "123; My Campaign")
+            # First check the upload vertical; if not found, look globally
+            # and auto-create the brand in the upload vertical.
+            brand_for_campaign = unknown_brand
+            m = re.match(r'^(\d+)\s*;\s*', campaign_name)
+            if m:
+                parsed_brand_id = int(m.group(1))
+                found = DimBrand.objects.filter(
+                    brand_id=parsed_brand_id, vertical=vertical,
+                ).first()
+                if not found:
+                    # Look up globally and clone into the upload vertical
+                    global_brand = DimBrand.objects.filter(
+                        brand_id=parsed_brand_id,
+                    ).first()
+                    if global_brand:
+                        found = DimBrand.objects.create(
+                            name=global_brand.name,
+                            slug=slugify(global_brand.name),
+                            brand_id=parsed_brand_id,
+                            vertical=vertical,
+                        )
+                if found:
+                    brand_for_campaign = found
+
             # Auto-create campaign
             campaign = DimCampaign.objects.create(
                 name=campaign_name,
                 external_id=ext_id,
-                brand=unknown_brand,
+                brand=brand_for_campaign,
                 source=source,
                 campaign_type=ctype,
+                amazon_type=amazon_type if source.slug == "amazon-marketplace" else "",
             )
             if ext_id:
                 campaigns_by_ext_id[ext_id] = campaign
@@ -1204,6 +1539,7 @@ def upload_csv(request):
         "types_created": types_created,
         "errors": errors,
         "total": created + updated,
+        "metadata_rows_skipped": metadata_rows_skipped,
     }
     return render(request, "dashboard/upload.html", ctx)
 
@@ -1213,15 +1549,28 @@ def upload_csv(request):
 # ───────────────────────────────────────────────────────────────────────────
 
 def match_campaigns(request):
-    """View to reassign campaigns to the correct brand."""
+    """View to reassign Unknown campaigns to the correct brand, scoped by vertical."""
+    verticals = DimVertical.objects.all()
     sources = DimSource.objects.all()
-    brands = DimBrand.objects.select_related("vertical").order_by("vertical__name", "name")
+
+    selected_vertical = request.GET.get("vertical") or request.POST.get("vertical")
     selected_source = request.GET.get("source") or request.POST.get("source")
     saved = False
     error = None
 
+    # Default to first vertical when none selected
+    if not selected_vertical and verticals.exists():
+        selected_vertical = str(verticals.first().id)
+
+    vertical = None
+    if selected_vertical:
+        vertical = DimVertical.objects.filter(id=selected_vertical).first()
+
     if request.method == "POST":
         selected_source = request.POST.get("source")
+        selected_vertical = request.POST.get("vertical")
+        if selected_vertical:
+            vertical = DimVertical.objects.filter(id=selected_vertical).first()
         campaign_ids = request.POST.getlist("campaign_id")
         for cid in campaign_ids:
             brand_id = request.POST.get(f"brand_{cid}")
@@ -1234,18 +1583,38 @@ def match_campaigns(request):
                     error = f"Could not update campaign {cid}."
         saved = True
 
+    # Only Unknown campaigns (slug="unknown") in the selected vertical
     campaigns = DimCampaign.objects.select_related(
         "brand", "brand__vertical", "source", "campaign_type",
-    )
+    ).filter(brand__slug="unknown")
+    if vertical:
+        campaigns = campaigns.filter(brand__vertical=vertical)
     if selected_source:
         campaigns = campaigns.filter(source_id=selected_source)
     campaigns = campaigns.order_by("source__name", "name")
 
+    # Brand dropdown scoped to selected vertical (exclude Unknown)
+    brands = DimBrand.objects.select_related("vertical").exclude(slug="unknown")
+    if vertical:
+        brands = brands.filter(vertical=vertical)
+    brands = brands.order_by("name")
+
     return render(request, "dashboard/match_campaigns.html", {
+        "verticals": verticals,
         "sources": sources,
         "brands": brands,
         "campaigns": campaigns,
+        "selected_vertical": int(selected_vertical) if selected_vertical else None,
         "selected_source": int(selected_source) if selected_source else None,
         "saved": saved,
         "error": error,
+        "vertical": vertical,
     })
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Help
+# ───────────────────────────────────────────────────────────────────────────
+
+def help_page(request):
+    return render(request, "dashboard/help.html")

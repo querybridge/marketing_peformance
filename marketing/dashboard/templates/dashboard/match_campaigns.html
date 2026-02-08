@@ -4,7 +4,10 @@
 {% block content %}
 <h2 class="ui header">
   <i class="exchange icon"></i>
-  <div class="content">Match Campaigns to Brands</div>
+  <div class="content">
+    Match Campaigns to Brands
+    <div class="sub header">Showing only unmapped (Unknown) campaigns</div>
+  </div>
 </h2>
 
 {% if error %}
@@ -21,11 +24,19 @@
 </div>
 {% endif %}
 
-{# ── Source filter ─────────────────────────────────────────────────── #}
+{# ── Vertical + Source filters ─────────────────────────────────────── #}
 <form class="ui form" method="get" style="margin-bottom:1.5em">
   <div class="inline fields">
     <div class="field">
-      <label>Filter by Source</label>
+      <label>Vertical</label>
+      <select name="vertical" onchange="this.form.submit()">
+        {% for v in verticals %}
+        <option value="{{ v.id }}" {% if selected_vertical == v.id %}selected{% endif %}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Source</label>
       <select name="source" onchange="this.form.submit()">
         <option value="">All sources</option>
         {% for s in sources %}
@@ -33,6 +44,11 @@
         {% endfor %}
       </select>
     </div>
+    {% if campaigns %}
+    <div class="field">
+      <div class="ui label">{{ campaigns|length }} unmapped campaign{{ campaigns|length|pluralize }}</div>
+    </div>
+    {% endif %}
   </div>
 </form>
 
@@ -40,6 +56,7 @@
 {% if campaigns %}
 <form class="ui form" method="post">
   {% csrf_token %}
+  <input type="hidden" name="vertical" value="{{ selected_vertical|default:'' }}">
   {% if selected_source %}
   <input type="hidden" name="source" value="{{ selected_source }}">
   {% endif %}
@@ -51,7 +68,6 @@
         <th>External ID</th>
         <th>Source</th>
         <th>Campaign Type</th>
-        <th>Current Brand</th>
         <th>Assign Brand</th>
       </tr>
     </thead>
@@ -62,12 +78,12 @@
         <td>{{ c.external_id|default:"—" }}</td>
         <td>{{ c.source.name }}</td>
         <td>{{ c.campaign_type.name }}</td>
-        <td>{{ c.brand.name }} <span style="color:#888">({{ c.brand.vertical.name }})</span></td>
         <td>
           <input type="hidden" name="campaign_id" value="{{ c.id }}">
           <select name="brand_{{ c.id }}">
+            <option value="">— select brand —</option>
             {% for b in brands %}
-            <option value="{{ b.id }}" {% if b.id == c.brand_id %}selected{% endif %}>{{ b.name }} ({{ b.vertical.name }})</option>
+            <option value="{{ b.id }}">{{ b.name }}</option>
             {% endfor %}
           </select>
         </td>
@@ -81,8 +97,9 @@
   </button>
 </form>
 {% else %}
-<div class="ui message">
-  <p>No campaigns found{% if selected_source %} for this source{% endif %}. Upload a CSV first to create campaigns.</p>
+<div class="ui positive message">
+  <i class="check circle icon"></i>
+  No unmapped campaigns{% if vertical %} in <strong>{{ vertical.name }}</strong>{% endif %}{% if selected_source %} for this source{% endif %}. All campaigns are assigned to a brand.
 </div>
 {% endif %}
 {% endblock %}

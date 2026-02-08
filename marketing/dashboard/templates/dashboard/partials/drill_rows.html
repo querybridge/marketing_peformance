@@ -7,12 +7,16 @@
       <th>{{ drill_level|title }}</th>
       <th class="right aligned">Spend</th>
       <th class="right aligned">Δ</th>
-      <th class="right aligned">Revenue*</th>
+      <th class="right aligned">Revenue</th>
       <th class="right aligned">Δ</th>
       <th class="right aligned">MTS</th>
       <th class="right aligned">Δ</th>
       <th class="right aligned">Clicks</th>
       <th class="right aligned">Conv.</th>
+      <th class="right aligned">Src CVR</th>
+      <th class="right aligned">Δ</th>
+      <th class="right aligned">Avg CV</th>
+      <th class="right aligned">Δ</th>
     </tr>
   </thead>
   <tbody>
@@ -30,26 +34,30 @@
       </td>
       <td>{{ row.name }}</td>
       <td class="right aligned">{{ row.spend|currency }}</td>
-      <td class="right aligned {{ row.spend_delta|delta_class }}">{{ row.spend_delta|pct }}</td>
+      <td class="right aligned {{ row.spend_delta|good_up }}">{{ row.spend_delta|pct }}</td>
       <td class="right aligned">{{ row.revenue|currency }}</td>
       <td class="right aligned {{ row.revenue_delta|delta_class }}">{{ row.revenue_delta|pct }}</td>
       <td class="right aligned">{{ row.mts|mts_fmt }}</td>
       <td class="right aligned {{ row.mts_delta|mts_delta_class }}">{{ row.mts_delta|bps }}</td>
       <td class="right aligned">{{ row.clicks|intcomma }}</td>
       <td class="right aligned">{{ row.conversions|intcomma }}</td>
+      <td class="right aligned">{{ row.src_cvr|mts_fmt }}</td>
+      <td class="right aligned {{ row.src_cvr_delta|delta_class }}">{{ row.src_cvr_delta|pct }}</td>
+      <td class="right aligned">{{ row.avg_conv_value|currency }}</td>
+      <td class="right aligned {{ row.avg_conv_value_delta|delta_class }}">{{ row.avg_conv_value_delta|pct }}</td>
     </tr>
     {% if drill_level != "campaign" %}
     <tr id="drill-{{ brand_id }}-{% if drill_level == 'source' %}s{{ row.id }}{% else %}s{{ source_id }}-t{{ row.id }}{% endif %}" style="display:none" class="drill-container">
-      <td colspan="10" style="padding:0;padding-left:1.5em">
+      <td colspan="14" style="padding:0;padding-left:1.5em">
         <div id="drill-body-{{ brand_id }}-{% if drill_level == 'source' %}s{{ row.id }}{% else %}s{{ source_id }}-t{{ row.id }}{% endif %}" class="drill-body"></div>
       </td>
     </tr>
     {% endif %}
     {% empty %}
-    <tr><td colspan="10" class="center aligned">No data.</td></tr>
+    <tr><td colspan="14" class="center aligned">No data.</td></tr>
     {% endfor %}
   </tbody>
 </table>
 {% if drill_level != "campaign" %}
-<div style="padding:0.4em 0.8em"><small class="text grey">* Revenue allocated by spend share at this level</small></div>
+<div style="padding:0.4em 0.8em"><small class="text grey">Revenue is platform-reported last-click conversion value and may differ from backend revenue shown at brand level.</small></div>
 {% endif %}

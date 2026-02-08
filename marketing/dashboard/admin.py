@@ -10,6 +10,7 @@ from .models import (
     FactBudget,
     FactMediaDaily,
     FactOrdersDaily,
+    FactVerticalBudget,
 )
 
 
@@ -27,7 +28,7 @@ class DimVerticalAdmin(admin.ModelAdmin):
 
 @admin.register(DimBrand)
 class DimBrandAdmin(admin.ModelAdmin):
-    list_display = ["name", "vertical", "slug"]
+    list_display = ["name", "brand_id", "vertical", "slug"]
     list_filter = ["vertical"]
 
 
@@ -43,8 +44,8 @@ class DimCampaignTypeAdmin(admin.ModelAdmin):
 
 @admin.register(DimCampaign)
 class DimCampaignAdmin(admin.ModelAdmin):
-    list_display = ["name", "brand", "source", "campaign_type", "status"]
-    list_filter = ["status", "source", "campaign_type", "brand__vertical"]
+    list_display = ["name", "brand", "source", "campaign_type", "amazon_type", "status"]
+    list_filter = ["status", "source", "campaign_type", "amazon_type", "brand__vertical"]
     search_fields = ["name"]
 
 
@@ -60,6 +61,13 @@ class FactOrdersDailyAdmin(admin.ModelAdmin):
     list_display = ["brand", "date", "orders", "new_revenue", "net_revenue"]
     list_filter = ["brand__vertical"]
     raw_id_fields = ["brand", "date"]
+
+
+@admin.register(FactVerticalBudget)
+class FactVerticalBudgetAdmin(admin.ModelAdmin):
+    list_display = ["vertical", "month", "revenue_budget", "mts_budget", "cancellation_rate"]
+    list_filter = ["vertical"]
+    raw_id_fields = ["month"]
 
 
 @admin.register(FactBudget)

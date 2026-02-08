@@ -16,27 +16,35 @@
       <div class="ui small list">
         <div class="item">
           <i class="green check icon"></i>
-          <div class="content"><strong>Required columns:</strong> Campaign name, Date, Cost</div>
+          <div class="content"><strong>Required columns:</strong> Campaign name, Date, Cost, Conversions, Conversion Value, Clicks</div>
         </div>
         <div class="item">
           <i class="blue info circle icon"></i>
-          <div class="content"><strong>Optional columns:</strong> Campaign ID, Campaign Type, Impressions, Clicks, Conversions, Conversion Value, Impression Share, Click Share</div>
+          <div class="content"><strong>Optional columns:</strong> Campaign ID, Campaign Type, Impressions, Impression Share, Click Share</div>
         </div>
         <div class="item">
           <i class="orange sync icon"></i>
           <div class="content"><strong>Upsert:</strong> Existing rows (same campaign + date) are updated; new rows are created.</div>
         </div>
         <div class="item">
+          <i class="sitemap icon"></i>
+          <div class="content"><strong>Vertical scoping:</strong> All campaign matching and brand assignment is scoped to the selected vertical. Select the correct vertical before uploading.</div>
+        </div>
+        <div class="item">
           <i class="purple plus icon"></i>
-          <div class="content"><strong>Auto-create:</strong> Unknown campaigns are created with brand set to "Unknown". Campaign type is read from the CSV (or defaults to "Uncategorized"). Assign the correct brand via <a href="{% url 'dashboard:match_campaigns' %}">Match Campaigns</a>.</div>
+          <div class="content"><strong>Auto-create:</strong> Unknown campaigns are created with brand set to "Unknown" within the selected vertical. Campaign type is read from the CSV (or defaults to "Uncategorized"). Assign the correct brand via <a href="{% url 'dashboard:match_campaigns' %}">Match Campaigns</a>.</div>
         </div>
         <div class="item">
           <i class="grey hashtag icon"></i>
-          <div class="content"><strong>Matching:</strong> Campaigns are matched by external ID first, then by name.</div>
+          <div class="content"><strong>Matching:</strong> Campaigns are matched by external ID first, then by name (within the selected vertical).</div>
         </div>
         <div class="item">
           <i class="teal exchange icon"></i>
-          <div class="content"><strong>Brand reassignment:</strong> After upload, use <a href="{% url 'dashboard:match_campaigns' %}">Match Campaigns</a> to reassign campaigns to the correct brand.</div>
+          <div class="content"><strong>Supported sources:</strong> Google Ads, Bing Ads, Meta Ads, Amazon Marketplace.</div>
+        </div>
+        <div class="item">
+          <i class="amazon icon"></i>
+          <div class="content"><strong>Amazon:</strong> Select Sponsored Ads (paid media) or Feed-based Listings (non-paid, cost defaults to 0).</div>
         </div>
       </div>
     </div>
@@ -86,6 +94,9 @@
         </div>
         {% endif %}
       </div>
+      {% if summary.metadata_rows_skipped %}
+      <p><i class="info circle icon"></i> Skipped {{ summary.metadata_rows_skipped }} metadata row{{ summary.metadata_rows_skipped|pluralize }} before the header.</p>
+      {% endif %}
       {% if summary.campaigns_created %}
       <p><i class="info circle icon"></i> Auto-created campaigns use the default brand. <a href="{% url 'dashboard:match_campaigns' %}">Reassign brands here.</a></p>
       {% endif %}
@@ -110,12 +121,36 @@
 
       <div class="field">
         <div class="required field">
+          <label>Vertical</label>
+          <select name="vertical" id="vertical-select" required>
+            <option value="">-- Select vertical --</option>
+            {% for v in verticals %}
+            <option value="{{ v.id }}">{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="required field">
           <label>Source (Ad Platform)</label>
-          <select name="source" id="source-select" required>
+          <select name="source" id="source-select" required disabled>
             <option value="">-- Select source --</option>
             {% for s in sources %}
             <option value="{{ s.id }}" data-slug="{{ s.slug }}">{{ s.name }}</option>
             {% endfor %}
+          </select>
+          <p class="ui small text" style="color:#999;margin-top:0.3em" id="source-hint">Select a vertical first.</p>
+        </div>
+      </div>
+
+      <div class="field" id="amazon-type-field" style="display:none">
+        <div class="required field">
+          <label>Amazon Type</label>
+          <select name="amazon_type" id="amazon-type-select">
+            <option value="">-- Select Amazon type --</option>
+            <option value="sponsored">Sponsored Ads (paid media)</option>
+            <option value="feed">Feed-based Listings (non-paid, cost = 0)</option>
           </select>
         </div>
       </div>
@@ -138,26 +173,74 @@
 <script>
 (function() {
   var columnInfo = {{ column_info_json|safe }};
-  var select = document.getElementById("source-select");
+  var verticalSelect = document.getElementById("vertical-select");
+  var sourceSelect = document.getElementById("source-select");
+  var sourceHint = document.getElementById("source-hint");
+  var amazonField = document.getElementById("amazon-type-field");
+  var amazonSelect = document.getElementById("amazon-type-select");
   var hintList = document.getElementById("column-hint-list");
 
-  select.addEventListener("change", function() {
-    var opt = select.options[select.selectedIndex];
-    var slug = opt ? opt.getAttribute("data-slug") : "";
+  function getSlug() {
+    var opt = sourceSelect.options[sourceSelect.selectedIndex];
+    return opt ? opt.getAttribute("data-slug") || "" : "";
+  }
+
+  function updateHints() {
+    var slug = getSlug();
+    var amazonType = amazonSelect.value;
     hintList.innerHTML = "";
 
-    if (slug && columnInfo[slug]) {
-      var cols = columnInfo[slug];
+    // For Amazon, use composite key; for others, use plain slug
+    var lookupKey = slug;
+    if (slug === "amazon-marketplace" && amazonType) {
+      lookupKey = "amazon-marketplace-" + amazonType;
+    }
+
+    if (lookupKey && columnInfo[lookupKey]) {
+      var cols = columnInfo[lookupKey];
       var html = '<div class="ui small list">';
       for (var i = 0; i < cols.length; i++) {
         html += '<div class="item"><i class="columns icon"></i> ' + cols[i] + '</div>';
       }
       html += '</div>';
+      if (slug === "amazon-marketplace" && amazonType === "feed") {
+        html += '<p style="color:#888;font-size:0.85em;margin-top:0.5em"><i class="info circle icon"></i> Feed-based listings are non-paid. Cost column is optional (defaults to 0).</p>';
+      }
       hintList.innerHTML = html;
+    } else if (slug === "amazon-marketplace" && !amazonType) {
+      hintList.innerHTML = '<p style="color:#888">Select an Amazon Type to see expected column names.</p>';
     } else if (slug) {
       hintList.innerHTML = '<p style="color:#888">No predefined mapping for this source. Generic column names will be auto-detected.</p>';
     }
+  }
+
+  // Enable source selector only after vertical is chosen
+  verticalSelect.addEventListener("change", function() {
+    if (verticalSelect.value) {
+      sourceSelect.disabled = false;
+      sourceHint.style.display = "none";
+    } else {
+      sourceSelect.disabled = true;
+      sourceSelect.value = "";
+      sourceHint.style.display = "";
+      amazonField.style.display = "none";
+      amazonSelect.value = "";
+      hintList.innerHTML = "";
+    }
   });
+
+  sourceSelect.addEventListener("change", function() {
+    var slug = getSlug();
+    if (slug === "amazon-marketplace") {
+      amazonField.style.display = "";
+    } else {
+      amazonField.style.display = "none";
+      amazonSelect.value = "";
+    }
+    updateHints();
+  });
+
+  amazonSelect.addEventListener("change", updateHints);
 })();
 </script>
 {% endblock %}

@@ -111,7 +111,7 @@
         <td class="center aligned"><i class="caret right icon drill-icon" id="icon-{{ row.id }}"></i></td>
         <td><strong>{{ row.name }}</strong><br><small class="text grey">{{ row.vertical }}</small></td>
         <td class="right aligned" data-sort-value="{{ row.spend|default_if_none:'0' }}">{{ row.spend|currency }}</td>
-        <td class="right aligned {{ row.spend_delta|good_down }}" data-sort-value="{{ row.spend_delta|default_if_none:'0' }}">{{ row.spend_delta|pct }}</td>
+        <td class="right aligned {{ row.spend_delta|good_up }}" data-sort-value="{{ row.spend_delta|default_if_none:'0' }}">{{ row.spend_delta|pct }}</td>
         <td class="right aligned" data-sort-value="{{ row.revenue|default_if_none:'0' }}">{{ row.revenue|currency }}</td>
         <td class="right aligned {{ row.revenue_delta|good_up }}" data-sort-value="{{ row.revenue_delta|default_if_none:'0' }}">{{ row.revenue_delta|pct }}</td>
         <td class="right aligned" data-sort-value="{{ row.mts|default_if_none:'0' }}">{{ row.mts|mts_fmt }}</td>
@@ -284,6 +284,12 @@ function toggleDrill(id, url) {
 <script>
 (function() {
   var trend = {{ trend_json|safe }};
+  var preset = '{{ preset }}';
+  var hAxisOpts = {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}};
+  if (preset === 'this_month' || preset === 'last_month') {
+    hAxisOpts.slantedText = true;
+    hAxisOpts.slantedTextAngle = 45;
+  }
 
   function fmtDollar(v) {
     if (v == null) return '—';
@@ -340,11 +346,11 @@ function toggleDrill(id, url) {
       },
       vAxes: {
         0: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
-        1: {textPosition: 'none', gridlines: {count: 0}}
+        1: {textPosition: 'none', gridlines: {count: 0}, baselineColor: 'transparent'}
       },
       chartArea: {left: 55, right: 15, height: '70%'},
       backgroundColor: 'transparent',
-      hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
+      hAxis: hAxisOpts,
       legend: {position: 'top', textStyle: {color: '#313E4F'}},
       focusTarget: 'category'
     };
@@ -385,7 +391,14 @@ function toggleDrill(id, url) {
       }
       dt.addRow(row);
     }
+    var pctFmt = new google.visualization.NumberFormat({pattern: '0.0%'});
+    pctFmt.format(dt, 1);
+    pctFmt.format(dt, 2);
     getDeltaFmt().format(dt, 3);
+    if (hasBounds) {
+      pctFmt.format(dt, 4);
+      pctFmt.format(dt, 5);
+    }
 
     if (hasBounds) {
       allVals.push(bounds.lower, bounds.upper);
@@ -415,10 +428,10 @@ function toggleDrill(id, url) {
       series: seriesOpts,
       chartArea: {left: 55, right: 15, height: '70%'},
       backgroundColor: 'transparent',
-      hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
+      hAxis: hAxisOpts,
       vAxes: {
         0: {gridlines: {color: '#DAEDFF', count: 6}, textStyle: {color: '#6B7D94'}, format: '0.0%', viewWindow: {min: vMin, max: vMax}},
-        1: {textPosition: 'none', gridlines: {count: 0}}
+        1: {textPosition: 'none', gridlines: {count: 0}, baselineColor: 'transparent'}
       },
       legend: {position: 'top', textStyle: {color: '#313E4F'}},
       focusTarget: 'category'
@@ -456,11 +469,11 @@ function toggleDrill(id, url) {
       },
       vAxes: {
         0: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
-        1: {textPosition: 'none', gridlines: {count: 0}}
+        1: {textPosition: 'none', gridlines: {count: 0}, baselineColor: 'transparent'}
       },
       chartArea: {left: 55, right: 15, height: '70%'},
       backgroundColor: 'transparent',
-      hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
+      hAxis: hAxisOpts,
       legend: {position: 'top', textStyle: {color: '#313E4F'}},
       focusTarget: 'category'
     };

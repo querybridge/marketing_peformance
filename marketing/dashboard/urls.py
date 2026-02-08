@@ -29,4 +29,5 @@ urlpatterns = [
     path("brands/", views.brands, name="brands"),
     path("upload/", views.upload_csv, name="upload_csv"),
     path("campaigns/match/", views.match_campaigns, name="match_campaigns"),
+    path("help/", views.help_page, name="help"),
 ]
