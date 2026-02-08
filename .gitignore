@@ -1,0 +1,7 @@
+bin/
+lib/
+pyvenv.cfg
+ecombvm/
+__pycache__/
+*.pyc
+db.sqlite3

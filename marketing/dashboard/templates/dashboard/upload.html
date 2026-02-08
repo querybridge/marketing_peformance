@@ -1,0 +1,163 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Upload Media Data{% endblock %}
+
+{% block content %}
+<h2 class="ui header">
+  <i class="upload icon"></i>
+  <div class="content">Upload Campaign Media Data</div>
+</h2>
+
+<div class="ui two column stackable grid">
+
+  {# ── Left: Instructions ─────────────────────────────────────────── #}
+  <div class="six wide column">
+    <div class="ui blue segment">
+      <h4 class="ui header">Instructions</h4>
+      <div class="ui small list">
+        <div class="item">
+          <i class="green check icon"></i>
+          <div class="content"><strong>Required columns:</strong> Campaign name, Date, Cost</div>
+        </div>
+        <div class="item">
+          <i class="blue info circle icon"></i>
+          <div class="content"><strong>Optional columns:</strong> Campaign ID, Campaign Type, Impressions, Clicks, Conversions, Conversion Value, Impression Share, Click Share</div>
+        </div>
+        <div class="item">
+          <i class="orange sync icon"></i>
+          <div class="content"><strong>Upsert:</strong> Existing rows (same campaign + date) are updated; new rows are created.</div>
+        </div>
+        <div class="item">
+          <i class="purple plus icon"></i>
+          <div class="content"><strong>Auto-create:</strong> Unknown campaigns are created with brand set to "Unknown". Campaign type is read from the CSV (or defaults to "Uncategorized"). Assign the correct brand via <a href="{% url 'dashboard:match_campaigns' %}">Match Campaigns</a>.</div>
+        </div>
+        <div class="item">
+          <i class="grey hashtag icon"></i>
+          <div class="content"><strong>Matching:</strong> Campaigns are matched by external ID first, then by name.</div>
+        </div>
+        <div class="item">
+          <i class="teal exchange icon"></i>
+          <div class="content"><strong>Brand reassignment:</strong> After upload, use <a href="{% url 'dashboard:match_campaigns' %}">Match Campaigns</a> to reassign campaigns to the correct brand.</div>
+        </div>
+      </div>
+    </div>
+
+    {# Dynamic column hints #}
+    <div class="ui segment" id="column-hint-box">
+      <h4 class="ui header">Expected Column Names</h4>
+      <p class="ui small text" style="color:#888">Select a source to see expected column names.</p>
+      <div id="column-hint-list"></div>
+    </div>
+  </div>
+
+  {# ── Right: Form + Results ──────────────────────────────────────── #}
+  <div class="ten wide column">
+
+    {% if error %}
+    <div class="ui negative message">
+      <div class="header">Upload Error</div>
+      <p>{{ error }}</p>
+    </div>
+    {% endif %}
+
+    {% if summary %}
+    <div class="ui positive message">
+      <div class="header">Import Complete</div>
+      <div class="ui small statistics" style="margin:1em 0">
+        <div class="statistic">
+          <div class="value">{{ summary.total }}</div>
+          <div class="label">Total Rows</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.created }}</div>
+          <div class="label">Created</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.updated }}</div>
+          <div class="label">Updated</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.campaigns_created }}</div>
+          <div class="label">Campaigns Auto-Created</div>
+        </div>
+        {% if summary.types_created %}
+        <div class="statistic">
+          <div class="value">{{ summary.types_created }}</div>
+          <div class="label">Types Auto-Created</div>
+        </div>
+        {% endif %}
+      </div>
+      {% if summary.campaigns_created %}
+      <p><i class="info circle icon"></i> Auto-created campaigns use the default brand. <a href="{% url 'dashboard:match_campaigns' %}">Reassign brands here.</a></p>
+      {% endif %}
+    </div>
+
+    {% if summary.errors %}
+    <div class="ui warning message">
+      <div class="header">Row-Level Issues ({{ summary.errors|length }})</div>
+      <div style="max-height:200px;overflow-y:auto">
+        <div class="ui small list">
+          {% for err in summary.errors %}
+          <div class="item">{{ err }}</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <form class="ui form segment" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <div class="field">
+        <div class="required field">
+          <label>Source (Ad Platform)</label>
+          <select name="source" id="source-select" required>
+            <option value="">-- Select source --</option>
+            {% for s in sources %}
+            <option value="{{ s.id }}" data-slug="{{ s.slug }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>CSV File</label>
+        <input type="file" name="csv_file" accept=".csv" required>
+      </div>
+
+      <button class="ui primary button" type="submit">
+        <i class="upload icon"></i> Upload &amp; Import
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var columnInfo = {{ column_info_json|safe }};
+  var select = document.getElementById("source-select");
+  var hintList = document.getElementById("column-hint-list");
+
+  select.addEventListener("change", function() {
+    var opt = select.options[select.selectedIndex];
+    var slug = opt ? opt.getAttribute("data-slug") : "";
+    hintList.innerHTML = "";
+
+    if (slug && columnInfo[slug]) {
+      var cols = columnInfo[slug];
+      var html = '<div class="ui small list">';
+      for (var i = 0; i < cols.length; i++) {
+        html += '<div class="item"><i class="columns icon"></i> ' + cols[i] + '</div>';
+      }
+      html += '</div>';
+      hintList.innerHTML = html;
+    } else if (slug) {
+      hintList.innerHTML = '<p style="color:#888">No predefined mapping for this source. Generic column names will be auto-detected.</p>';
+    }
+  });
+})();
+</script>
+{% endblock %}

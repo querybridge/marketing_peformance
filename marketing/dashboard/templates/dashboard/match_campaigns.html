@@ -1,0 +1,88 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Match Campaigns to Brands{% endblock %}
+
+{% block content %}
+<h2 class="ui header">
+  <i class="exchange icon"></i>
+  <div class="content">Match Campaigns to Brands</div>
+</h2>
+
+{% if error %}
+<div class="ui negative message">
+  <div class="header">Error</div>
+  <p>{{ error }}</p>
+</div>
+{% endif %}
+
+{% if saved %}
+<div class="ui positive message">
+  <div class="header">Saved</div>
+  <p>Brand assignments have been updated.</p>
+</div>
+{% endif %}
+
+{# ── Source filter ─────────────────────────────────────────────────── #}
+<form class="ui form" method="get" style="margin-bottom:1.5em">
+  <div class="inline fields">
+    <div class="field">
+      <label>Filter by Source</label>
+      <select name="source" onchange="this.form.submit()">
+        <option value="">All sources</option>
+        {% for s in sources %}
+        <option value="{{ s.id }}" {% if selected_source == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</form>
+
+{# ── Campaign table ───────────────────────────────────────────────── #}
+{% if campaigns %}
+<form class="ui form" method="post">
+  {% csrf_token %}
+  {% if selected_source %}
+  <input type="hidden" name="source" value="{{ selected_source }}">
+  {% endif %}
+
+  <table class="ui compact celled table">
+    <thead>
+      <tr>
+        <th>Campaign</th>
+        <th>External ID</th>
+        <th>Source</th>
+        <th>Campaign Type</th>
+        <th>Current Brand</th>
+        <th>Assign Brand</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in campaigns %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td>{{ c.external_id|default:"—" }}</td>
+        <td>{{ c.source.name }}</td>
+        <td>{{ c.campaign_type.name }}</td>
+        <td>{{ c.brand.name }} <span style="color:#888">({{ c.brand.vertical.name }})</span></td>
+        <td>
+          <input type="hidden" name="campaign_id" value="{{ c.id }}">
+          <select name="brand_{{ c.id }}">
+            {% for b in brands %}
+            <option value="{{ b.id }}" {% if b.id == c.brand_id %}selected{% endif %}>{{ b.name }} ({{ b.vertical.name }})</option>
+            {% endfor %}
+          </select>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <button class="ui primary button" type="submit">
+    <i class="save icon"></i> Save Brand Assignments
+  </button>
+</form>
+{% else %}
+<div class="ui message">
+  <p>No campaigns found{% if selected_source %} for this source{% endif %}. Upload a CSV first to create campaigns.</p>
+</div>
+{% endif %}
+{% endblock %}

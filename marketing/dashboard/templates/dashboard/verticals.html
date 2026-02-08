@@ -1,0 +1,93 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Verticals — Weekly Performance Dashboard{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">Verticals</h2>
+<p style="color:#6B7D94">Manage business verticals that group brands.</p>
+
+{% if error %}
+<div class="ui error message">
+  <i class="exclamation triangle icon"></i> {{ error }}
+</div>
+{% endif %}
+
+<!-- ── Add Vertical ──────────────────────────────────────────── -->
+<form method="post" action="{% url 'dashboard:verticals' %}" class="ui form" style="margin-bottom:1.5em">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="add">
+  <div class="ui action input" style="max-width:420px">
+    <input type="text" name="name" placeholder="New vertical name…" required>
+    <button type="submit" class="ui primary button">
+      <i class="plus icon"></i> Add
+    </button>
+  </div>
+</form>
+
+<!-- ── Verticals Table ───────────────────────────────────────── -->
+<table class="ui compact celled striped table">
+  <thead>
+    <tr>
+      <th>Vertical</th>
+      <th>Slug</th>
+      <th class="center aligned" style="width:100px">Brands</th>
+      <th style="width:280px">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>
+        <strong id="name-display-{{ row.vertical.id }}">{{ row.vertical.name }}</strong>
+        <form method="post" action="{% url 'dashboard:verticals' %}"
+              id="edit-form-{{ row.vertical.id }}" class="ui form"
+              style="display:none;margin:0">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="edit">
+          <input type="hidden" name="id" value="{{ row.vertical.id }}">
+          <div class="ui small action input" style="width:100%">
+            <input type="text" name="name" value="{{ row.vertical.name }}" required>
+            <button type="submit" class="ui small positive button">Save</button>
+            <button type="button" class="ui small button"
+                    onclick="toggleEdit({{ row.vertical.id }}, false)">Cancel</button>
+          </div>
+        </form>
+      </td>
+      <td style="color:#6B7D94">{{ row.vertical.slug }}</td>
+      <td class="center aligned">{{ row.brand_count }}</td>
+      <td>
+        <button class="ui small button" onclick="toggleEdit({{ row.vertical.id }}, true)">
+          <i class="edit icon"></i> Rename
+        </button>
+        {% if row.brand_count == 0 %}
+        <form method="post" action="{% url 'dashboard:verticals' %}" style="display:inline">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="{{ row.vertical.id }}">
+          <button type="submit" class="ui small negative button"
+                  onclick="return confirm('Delete {{ row.vertical.name }}?')">
+            <i class="trash icon"></i> Delete
+          </button>
+        </form>
+        {% else %}
+        <span class="ui small basic disabled button" data-tooltip="Remove brands first" data-position="top center">
+          <i class="trash icon"></i> Delete
+        </span>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4" class="center aligned">No verticals yet. Add one above.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function toggleEdit(id, show) {
+  document.getElementById('name-display-' + id).style.display = show ? 'none' : '';
+  document.getElementById('edit-form-' + id).style.display = show ? '' : 'none';
+}
+</script>
+
+{% endblock %}

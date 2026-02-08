@@ -1,0 +1,80 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Alert Rules Spec{% endblock %}
+
+{% block content %}
+<h2 class="ui header">
+  <i class="bell outline icon"></i>
+  <div class="content">
+    Alerting Rules Specification
+    <div class="sub header">
+      Classification logic applied per brand at the end of each aggregation pass.
+      A brand can carry multiple simultaneous alerts.
+    </div>
+  </div>
+</h2>
+
+<table class="ui compact celled structured table" style="font-size:.91em">
+  <thead>
+    <tr>
+      <th rowspan="2">Alert</th>
+      <th rowspan="2">Severity</th>
+      <th colspan="2">Rule Logic</th>
+      <th rowspan="2">Tooltip</th>
+      <th rowspan="2">Primary CTA</th>
+      <th rowspan="2">Drill Target</th>
+    </tr>
+    <tr>
+      <th>Python</th>
+      <th>SQL CASE</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in alerts %}
+    <tr>
+      <td>
+        <span class="ui {{ a.color }} label" style="white-space:nowrap">
+          <i class="{{ a.icon }} icon"></i> {{ a.name }}
+        </span>
+      </td>
+      <td class="center aligned">
+        {% if a.severity == "High" %}
+          <span class="ui red text"><strong>{{ a.severity }}</strong></span>
+        {% elif a.severity == "Med" %}
+          <span class="ui orange text"><strong>{{ a.severity }}</strong></span>
+        {% else %}
+          <span class="ui grey text">{{ a.severity }}</span>
+        {% endif %}
+      </td>
+      <td><code style="white-space:pre-wrap;font-size:.88em">{{ a.python }}</code></td>
+      <td><code style="white-space:pre-wrap;font-size:.85em">{{ a.sql }}</code></td>
+      <td>{{ a.tooltip }}</td>
+      <td>{{ a.cta }}</td>
+      <td class="center aligned"><strong>{{ a.drill_target }}</strong></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="ui message" style="margin-top:1.5em">
+  <div class="header">Threshold Reference</div>
+  <ul class="list">
+    <li><strong>50 bps</strong> = 0.0050 absolute MTS difference (e.g. budget 25.00% vs actual 24.50%)</li>
+    <li><strong>10% YOY</strong> = <code>(cur_rev − yoy_rev) / yoy_rev &ge; 0.10</code></li>
+    <li><strong>5% WOW revenue decline</strong> = <code>(cur_rev − cmp_rev) / cmp_rev &lt; −0.05</code></li>
+    <li><strong>YOY window</strong> = 52-week offset (364 days) to preserve day-of-week alignment</li>
+    <li><strong>MTS</strong> = Cost &divide; Revenue — lower is better</li>
+    <li>Alerts evaluate <strong>after</strong> pacing alignment, so partial weeks compare equal elapsed days</li>
+  </ul>
+</div>
+
+<div class="ui message">
+  <div class="header">Precedence &amp; Overlap</div>
+  <ul class="list">
+    <li>Alerts are <strong>not mutually exclusive</strong> — a brand can be both <em>Overly Efficient</em> and <em>Missing Revenue</em>.</li>
+    <li><em>Needs Attention</em> and <em>Doing Well</em> are logically exclusive (revenue can't be both &lt;10% and &ge;110% of YOY).</li>
+    <li><em>Overly Efficient</em> and <em>Doing Well</em> can coexist — a brand growing 15% YOY while 60 bps under MTS budget gets both badges.</li>
+    <li>Data-quality alerts (<em>No Budget</em>, <em>No Revenue</em>) suppress the alerts that depend on the missing data.</li>
+  </ul>
+</div>
+{% endblock %}

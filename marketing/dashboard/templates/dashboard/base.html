@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Weekly Performance Dashboard{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.5.0/dist/semantic.min.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+  <script>google.charts.load('current', {packages: ['corechart']});</script>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+</head>
+<body style="display:flex;flex-direction:column;min-height:100vh;margin:0">
+
+  <div class="ui fixed inverted menu" style="background:#313E4F">
+    <div class="ui container">
+      <span class="header item">Weekly Performance</span>
+      <a class="item" href="{% url 'dashboard:index' %}">Overview</a>
+      <a class="item" href="{% url 'dashboard:budgets' %}">Budgets</a>
+      <a class="item" href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>
+      <div class="right menu">
+        <a class="item" id="pdf-link" href="{% url 'dashboard:export_pdf' %}?{{ filter_qs|default:'' }}">
+          <i class="file pdf outline icon"></i> PDF
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="ui container" style="margin-top:5em;padding-bottom:3em;flex:1">
+    {% block content %}{% endblock %}
+  </div>
+
+  <footer class="ui inverted vertical segment" style="background:#313E4F;padding:1.5em 0;margin-top:auto">
+    <div class="ui container" style="text-align:center">
+      <a href="{% url 'dashboard:verticals' %}" style="color:#9BAFC4;margin:0 1em">Verticals</a>
+      <a href="{% url 'dashboard:brands' %}" style="color:#9BAFC4;margin:0 1em">Brands</a>
+      <a href="{% url 'dashboard:data_dictionary' %}" style="color:#9BAFC4;margin:0 1em">Data Dictionary</a>
+      <a href="{% url 'dashboard:alert_spec' %}" style="color:#9BAFC4;margin:0 1em">Alert Rules</a>
+      <a href="{% url 'dashboard:match_campaigns' %}" style="color:#9BAFC4;margin:0 1em">Match Campaigns</a>
+    </div>
+  </footer>
+
+  <script>
+    // Keep the PDF export link in sync with the current filter params.
+    // HTMX pushes the new query string into the browser URL on each
+    // filter change; we mirror that into the PDF link after every swap.
+    (function() {
+      var base = "{% url 'dashboard:export_pdf' %}";
+      function syncPdfLink() {
+        var link = document.getElementById("pdf-link");
+        if (link) link.href = base + window.location.search;
+      }
+      document.body.addEventListener("htmx:pushedIntoHistory", syncPdfLink);
+      document.body.addEventListener("htmx:replacedInHistory", syncPdfLink);
+    })();
+  </script>
+  {% block scripts %}{% endblock %}
+
+</body>
+</html>

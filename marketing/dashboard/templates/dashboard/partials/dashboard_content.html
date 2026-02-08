@@ -1,0 +1,505 @@
+{% load dashboard_filters %}
+
+<!-- ── Period Badge ───────────────────────────────────────────── -->
+<div class="ui small header" style="margin-bottom:0.5em">
+  {{ current_start|date:"M d" }} – {{ current_end|date:"M d, Y" }}
+  <span class="ui tiny label">{{ current_days }} day{{ current_days|pluralize }}</span>
+  <span class="ui tiny grey label">{{ period_label }}: {{ compare_start|date:"M d" }} – {{ compare_end|date:"M d" }}</span>
+</div>
+
+<!-- ── Trend Charts ──────────────────────────────────────────── -->
+<div class="ui three column stackable grid">
+  <div class="column">
+    <div class="ui segment">
+      <h4 class="ui header">Daily Revenue</h4>
+      <div id="chart-revenue" style="width:100%;height:280px"></div>
+    </div>
+  </div>
+  <div class="column">
+    <div class="ui segment">
+      <h4 class="ui header">Daily Spend</h4>
+      <div id="chart-spend" style="width:100%;height:280px"></div>
+    </div>
+  </div>
+  <div class="column">
+    <div class="ui segment">
+      <h4 class="ui header">Daily MTS</h4>
+      <div id="chart-mts" style="width:100%;height:280px"></div>
+    </div>
+  </div>
+</div>
+<div class="ui three column stackable grid">
+  <div class="column">
+    <div class="ui segment">
+      <h4 class="ui header">Daily Orders</h4>
+      <div id="chart-orders" style="width:100%;height:280px"></div>
+    </div>
+  </div>
+  <div class="column">
+    <div class="ui segment">
+      <h4 class="ui header">Daily AOV</h4>
+      <div id="chart-aov" style="width:100%;height:280px"></div>
+    </div>
+  </div>
+  <div class="column">
+    <div class="ui segment">
+      <h4 class="ui header">Daily Net CVR</h4>
+      <div id="chart-netcvr" style="width:100%;height:280px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Exceptions Panel ──────────────────────────────────────── -->
+{% if exceptions %}
+<div class="ui segment" style="padding:0.8em 1em">
+  <div class="ui labels">
+    {% for key, a in exceptions.items %}
+    <span class="ui {{ a.color }} label">
+      <i class="{{ a.icon }} icon"></i> {{ a.label }}
+      <span class="detail">{{ a.count }}</span>
+    </span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Brand Performance Table ───────────────────────────────── -->
+<style>
+  th.sortable-col { cursor: pointer; user-select: none; }
+  th.sortable-col:hover { background: #c4dcf5 !important; }
+  th.sortable-col .sort-icon { font-size: 0.8em; color: #256FAD; }
+  .ui.table td.delta-good { color: #1a8a38 !important; }
+  .ui.table td.delta-warn { color: #e8880c !important; }
+  .ui.table td.delta-bad  { color: #c41e1e !important; }
+  .ui.table td.delta-flat { color: #6B7D94 !important; }
+</style>
+<div class="ui segment">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em">
+    <h3 class="ui header" style="margin:0">Brand Performance</h3>
+    <div class="ui small icon input" style="width:220px">
+      <input type="text" id="brand-filter" placeholder="Filter by brand…">
+      <i class="search icon"></i>
+    </div>
+  </div>
+  <table class="ui compact celled striped table brand-table" id="brand-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th>Brand</th>
+        <th class="right aligned sortable-col" data-sort-col="2">Spend <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="3">Spend &Delta; <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="4">Revenue <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="5">Rev &Delta; <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="6">MTS <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="7">MTS &Delta; <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="8">Orders <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="9">AOV <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="10">Net CVR <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="11">Mkt CVR <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="12">Rev Goal <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="13">vs Goal <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="14">MTS Goal <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="15">vs Goal <span class="sort-icon"></span></th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in brand_rows %}
+      <tr class="brand-row clickable"
+          data-brand-name="{{ row.name|lower }}"
+          onclick="toggleDrill({{ row.id }}, '/drill/brand/{{ row.id }}/?{{ filter_qs }}')">
+        <td class="center aligned"><i class="caret right icon drill-icon" id="icon-{{ row.id }}"></i></td>
+        <td><strong>{{ row.name }}</strong><br><small class="text grey">{{ row.vertical }}</small></td>
+        <td class="right aligned" data-sort-value="{{ row.spend|default_if_none:'0' }}">{{ row.spend|currency }}</td>
+        <td class="right aligned {{ row.spend_delta|good_down }}" data-sort-value="{{ row.spend_delta|default_if_none:'0' }}">{{ row.spend_delta|pct }}</td>
+        <td class="right aligned" data-sort-value="{{ row.revenue|default_if_none:'0' }}">{{ row.revenue|currency }}</td>
+        <td class="right aligned {{ row.revenue_delta|good_up }}" data-sort-value="{{ row.revenue_delta|default_if_none:'0' }}">{{ row.revenue_delta|pct }}</td>
+        <td class="right aligned" data-sort-value="{{ row.mts|default_if_none:'0' }}">{{ row.mts|mts_fmt }}</td>
+        <td class="right aligned {{ row.mts_delta|good_down }}" data-sort-value="{{ row.mts_delta|default_if_none:'0' }}">{{ row.mts_delta|bps }}</td>
+        <td class="right aligned" data-sort-value="{{ row.orders|default_if_none:'0' }}">{{ row.orders|intcomma }}</td>
+        <td class="right aligned" data-sort-value="{{ row.aov|default_if_none:'0' }}">{{ row.aov|currency }}</td>
+        <td class="right aligned" data-sort-value="{{ row.net_cvr|default_if_none:'0' }}">{{ row.net_cvr|mts_fmt }}</td>
+        <td class="right aligned" data-sort-value="{{ row.mkt_cvr|default_if_none:'0' }}">{{ row.mkt_cvr|mts_fmt }}</td>
+        <td class="right aligned" data-sort-value="{{ row.revenue_budget|default_if_none:'0' }}">{{ row.revenue_budget|currency }}</td>
+        <td class="right aligned {{ row.revenue_vs_budget|good_up }}" data-sort-value="{{ row.revenue_vs_budget|default_if_none:'0' }}">{{ row.revenue_vs_budget|pct }}</td>
+        <td class="right aligned" data-sort-value="{{ row.mts_budget|default_if_none:'0' }}">{{ row.mts_budget|mts_fmt }}</td>
+        <td class="right aligned {{ row.mts_vs_budget|mts_vs_goal_class }}" data-sort-value="{{ row.mts_vs_budget|default_if_none:'0' }}">{{ row.mts_vs_budget|bps }}</td>
+        <td>
+          {% for a in row.alerts %}
+          <span class="ui mini label alert-{{ a }}"
+                data-tooltip="{{ a|alert_tooltip }}"
+                data-position="top center"
+                data-variation="small">
+            <i class="{{ a|alert_icon }} icon"></i>{{ a|alert_label }}
+          </span>
+          {% endfor %}
+        </td>
+      </tr>
+      <!-- Drill container — filled by HTMX on click -->
+      <tr id="drill-{{ row.id }}" style="display:none" class="drill-container">
+        <td colspan="17" style="padding:0">
+          <div id="drill-body-{{ row.id }}" class="drill-body"></div>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="17" class="center aligned">No data for this period.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-top:1em">
+    <span class="ui small text" style="color:#6B7D94">
+      Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }} brands
+    </span>
+    <div class="ui small pagination menu">
+      {% if page_obj.has_previous %}
+      <a class="item" href="?{{ filter_qs_no_page }}&page={{ page_obj.previous_page_number }}">
+        <i class="left chevron icon"></i>
+      </a>
+      {% endif %}
+      {% for num in page_obj.paginator.page_range %}
+        {% if num == page_obj.number %}
+        <a class="active item">{{ num }}</a>
+        {% else %}
+        <a class="item" href="?{{ filter_qs_no_page }}&page={{ num }}">{{ num }}</a>
+        {% endif %}
+      {% endfor %}
+      {% if page_obj.has_next %}
+      <a class="item" href="?{{ filter_qs_no_page }}&page={{ page_obj.next_page_number }}">
+        <i class="right chevron icon"></i>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- ── Drill-down JS ─────────────────────────────────────────── -->
+<script>
+function toggleDrill(id, url) {
+  var container = document.getElementById('drill-' + id);
+  var body = document.getElementById('drill-body-' + id);
+  var icon = document.getElementById('icon-' + id);
+
+  if (container.style.display === 'none') {
+    container.style.display = '';
+    icon.classList.replace('caret-right', 'caret-down');
+    icon.className = 'caret down icon drill-icon';
+    if (!body.innerHTML.trim()) {
+      htmx.ajax('GET', url, {target: body, swap: 'innerHTML'});
+    }
+  } else {
+    container.style.display = 'none';
+    icon.className = 'caret right icon drill-icon';
+  }
+}
+</script>
+
+<!-- ── Table Sort & Filter ──────────────────────────────────── -->
+<script>
+(function() {
+  var table = document.getElementById('brand-table');
+  if (!table) return;
+  var tbody = table.tBodies[0];
+  var headers = table.querySelectorAll('th.sortable-col');
+  var filterInput = document.getElementById('brand-filter');
+  var currentCol = null;
+  var ascending = true;
+
+  // ── Collect brand-row / drill-container pairs ──
+  function getRowPairs() {
+    var pairs = [];
+    var rows = tbody.querySelectorAll('tr.brand-row');
+    for (var i = 0; i < rows.length; i++) {
+      var drill = rows[i].nextElementSibling;
+      pairs.push({brand: rows[i], drill: drill && drill.classList.contains('drill-container') ? drill : null});
+    }
+    return pairs;
+  }
+
+  // ── Update sort arrow spans ──
+  function updateIcons(activeHeader, asc) {
+    headers.forEach(function(h) {
+      var icon = h.querySelector('.sort-icon');
+      if (!icon) return;
+      if (h === activeHeader) {
+        icon.textContent = asc ? ' \u25B2' : ' \u25BC';
+        icon.style.color = '#256FAD';
+      } else {
+        icon.textContent = '';
+      }
+    });
+  }
+
+  // ── Sort ──
+  function sortByCol(colIdx, asc) {
+    var pairs = getRowPairs();
+    pairs.sort(function(a, b) {
+      var av = parseFloat(a.brand.children[colIdx].getAttribute('data-sort-value')) || 0;
+      var bv = parseFloat(b.brand.children[colIdx].getAttribute('data-sort-value')) || 0;
+      return asc ? av - bv : bv - av;
+    });
+    for (var i = 0; i < pairs.length; i++) {
+      tbody.appendChild(pairs[i].brand);
+      if (pairs[i].drill) tbody.appendChild(pairs[i].drill);
+    }
+  }
+
+  headers.forEach(function(th) {
+    th.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var col = parseInt(th.getAttribute('data-sort-col'));
+      if (currentCol === col) {
+        ascending = !ascending;
+      } else {
+        currentCol = col;
+        ascending = false;
+      }
+      updateIcons(th, ascending);
+      sortByCol(col, ascending);
+    });
+  });
+
+  // ── Filter ──
+  if (filterInput) {
+    filterInput.addEventListener('input', function() {
+      var q = this.value.toLowerCase();
+      var pairs = getRowPairs();
+      for (var i = 0; i < pairs.length; i++) {
+        var name = pairs[i].brand.getAttribute('data-brand-name') || '';
+        var show = !q || name.indexOf(q) !== -1;
+        pairs[i].brand.style.display = show ? '' : 'none';
+        if (pairs[i].drill) {
+          if (!show) pairs[i].drill.style.display = 'none';
+        }
+      }
+    });
+  }
+})();
+</script>
+
+<!-- ── Chart JS ──────────────────────────────────────────────── -->
+<script>
+(function() {
+  var trend = {{ trend_json|safe }};
+
+  function fmtDollar(v) {
+    if (v == null) return '—';
+    return '$' + v.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+  }
+  function fmtPct(v) {
+    if (v == null) return '—';
+    return (v * 100).toFixed(1) + '%';
+  }
+  function fmtInt(v) {
+    if (v == null) return '—';
+    return v.toLocaleString(undefined, {maximumFractionDigits: 0});
+  }
+  function tipHtml(dayLabel, curV, cmpV, formatter, invertDelta) {
+    var fc = formatter || fmtDollar;
+    var deltaStr = '—';
+    if (curV != null && cmpV != null && cmpV !== 0) {
+      var d = (curV - cmpV) / Math.abs(cmpV) * 100;
+      if (invertDelta) d = -d;
+      var sign = d > 0 ? '+' : '';
+      var color = d > 0.5 ? '#1a8a38' : d < -0.5 ? '#c41e1e' : '#6B7D94';
+      deltaStr = '<b style="color:' + color + '">' + sign + d.toFixed(1) + '%</b>';
+    }
+    return '<div style="padding:8px 10px;font-size:12px;line-height:1.6;min-width:120px">'
+      + '<strong>' + dayLabel + '</strong><br>'
+      + '<b>' + fc(curV) + '</b><br>'
+      + fc(cmpV) + '<br>'
+      + deltaStr
+      + '</div>';
+  }
+
+  var TIP = {type: 'string', role: 'tooltip', p: {html: true}};
+  var EMPTY_TIP = ' ';
+
+  function drawTrend(elId, metric, label, color, cmpColor, formatter, invertDelta, vAxisFmt) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+
+    var dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Day');
+    dt.addColumn('number', 'Current');
+    dt.addColumn(TIP);
+    dt.addColumn('number', 'Compare');
+    dt.addColumn(TIP);
+
+    var cur = trend.current || [];
+    var cmp = trend.compare || [];
+    var maxLen = Math.max(cur.length, cmp.length);
+
+    for (var i = 0; i < maxLen; i++) {
+      var dayLabel = (cur[i] || cmp[i] || {}).day || '';
+      var curV = cur[i] ? cur[i][metric] : null;
+      var cmpV = cmp[i] ? cmp[i][metric] : null;
+      var tip = tipHtml(dayLabel, curV, cmpV, formatter, invertDelta);
+      dt.addRow([dayLabel, curV, tip, cmpV, EMPTY_TIP]);
+    }
+
+    var opts = {
+      curveType: 'function',
+      tooltip: {isHtml: true},
+      series: {
+        0: {color: color, lineWidth: 2},
+        1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1}
+      },
+      chartArea: {left: 55, right: 15, height: '70%'},
+      backgroundColor: 'transparent',
+      hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
+      vAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
+      legend: {position: 'top', textStyle: {color: '#313E4F'}},
+      focusTarget: 'category'
+    };
+    if (vAxisFmt) opts.vAxis.format = vAxisFmt;
+    new google.visualization.LineChart(el).draw(dt, opts);
+  }
+
+  function drawRatio(elId, computeFn, color, cmpColor, formatter, invertDelta, bounds) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+
+    var dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Day');
+    dt.addColumn('number', 'Current');
+    dt.addColumn(TIP);
+    dt.addColumn('number', 'Compare');
+    dt.addColumn(TIP);
+
+    var hasBounds = bounds && bounds.lower != null && bounds.upper != null;
+    if (hasBounds) {
+      dt.addColumn('number', 'Lower Bound');
+      dt.addColumn('number', 'Upper Bound');
+    }
+
+    var cur = trend.current || [];
+    var cmp = trend.compare || [];
+    var maxLen = Math.max(cur.length, cmp.length);
+    var allVals = [];
+
+    for (var i = 0; i < maxLen; i++) {
+      var dayLabel = (cur[i] || cmp[i] || {}).day || '';
+      var curV = cur[i] ? computeFn(cur[i]) : null;
+      var cmpV = cmp[i] ? computeFn(cmp[i]) : null;
+      if (curV != null) allVals.push(curV);
+      if (cmpV != null) allVals.push(cmpV);
+      var tip = tipHtml(dayLabel, curV, cmpV, formatter, invertDelta);
+      var row = [dayLabel, curV, tip, cmpV, EMPTY_TIP];
+      if (hasBounds) {
+        row.push(bounds.lower, bounds.upper);
+      }
+      dt.addRow(row);
+    }
+
+    if (hasBounds) {
+      allVals.push(bounds.lower, bounds.upper);
+    }
+
+    var vMin = 0, vMax = 1;
+    if (allVals.length) {
+      var lo = Math.min.apply(null, allVals);
+      var hi = Math.max.apply(null, allVals);
+      var pad = Math.max((hi - lo) * 0.25, 0.005);
+      vMin = Math.max(lo - pad, 0);
+      vMax = hi + pad;
+    }
+
+    var seriesOpts = {
+      0: {color: color, lineWidth: 2},
+      1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1}
+    };
+    if (hasBounds) {
+      seriesOpts[2] = {color: '#000000', lineWidth: 1, lineDashStyle: null, pointSize: 0, visibleInLegend: true};
+      seriesOpts[3] = {color: '#000000', lineWidth: 1, lineDashStyle: null, pointSize: 0, visibleInLegend: true};
+    }
+
+    new google.visualization.LineChart(el).draw(dt, {
+      curveType: 'function',
+      tooltip: {isHtml: true},
+      series: seriesOpts,
+      chartArea: {left: 55, right: 15, height: '70%'},
+      backgroundColor: 'transparent',
+      hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
+      vAxis: {
+        gridlines: {color: '#DAEDFF', count: 6},
+        textStyle: {color: '#6B7D94'},
+        format: '0.0%',
+        viewWindow: {min: vMin, max: vMax}
+      },
+      legend: {position: 'top', textStyle: {color: '#313E4F'}},
+      focusTarget: 'category'
+    });
+  }
+
+  function drawComputed(elId, computeFn, color, cmpColor, formatter, invertDelta, vAxisFmt) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+
+    var dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Day');
+    dt.addColumn('number', 'Current');
+    dt.addColumn(TIP);
+    dt.addColumn('number', 'Compare');
+    dt.addColumn(TIP);
+
+    var cur = trend.current || [];
+    var cmp = trend.compare || [];
+    var maxLen = Math.max(cur.length, cmp.length);
+
+    for (var i = 0; i < maxLen; i++) {
+      var dayLabel = (cur[i] || cmp[i] || {}).day || '';
+      var curV = cur[i] ? computeFn(cur[i]) : null;
+      var cmpV = cmp[i] ? computeFn(cmp[i]) : null;
+      var tip = tipHtml(dayLabel, curV, cmpV, formatter, invertDelta);
+      dt.addRow([dayLabel, curV, tip, cmpV, EMPTY_TIP]);
+    }
+
+    var opts = {
+      curveType: 'function',
+      tooltip: {isHtml: true},
+      series: {
+        0: {color: color, lineWidth: 2},
+        1: {color: cmpColor, lineDashStyle: [4,4], lineWidth: 1}
+      },
+      chartArea: {left: 55, right: 15, height: '70%'},
+      backgroundColor: 'transparent',
+      hAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}},
+      vAxis: {gridlines: {color: '#DAEDFF'}, textStyle: {color: '#6B7D94'}, minValue: 0},
+      legend: {position: 'top', textStyle: {color: '#313E4F'}},
+      focusTarget: 'category'
+    };
+    if (vAxisFmt) opts.vAxis.format = vAxisFmt;
+    new google.visualization.LineChart(el).draw(dt, opts);
+  }
+
+  function drawAll() {
+    drawTrend('chart-revenue', 'revenue', 'Revenue', '#1a8a38', '#93cca2', fmtDollar, false, 'short');
+    drawTrend('chart-spend',   'spend',   'Spend',   '#256FAD', '#9fc5e8', fmtDollar, false, 'short');
+    var mtsBudget = {{ mts_budget_json|safe }};
+    var mtsBounds = null;
+    if (mtsBudget != null) {
+      mtsBounds = {lower: mtsBudget - 0.005, upper: mtsBudget + 0.005};
+    }
+    drawRatio('chart-mts', function(d) {
+      return d.revenue > 0 ? d.spend / d.revenue : null;
+    }, '#8B5DAD', '#c9b0de', fmtPct, true, mtsBounds);
+    drawTrend('chart-orders', 'orders', 'Orders', '#e8880c', '#f5c98a', fmtInt, false, 'short');
+    drawComputed('chart-aov', function(d) {
+      return d.orders > 0 ? d.revenue / d.orders : null;
+    }, '#2185d0', '#9fc5e8', fmtDollar, false, 'short');
+    drawRatio('chart-netcvr', function(d) {
+      return d.clicks > 0 ? d.orders / d.clicks : null;
+    }, '#a333c8', '#d5a8e8', fmtPct, false);
+  }
+
+  if (google.visualization && google.visualization.LineChart) {
+    drawAll();
+  } else {
+    google.charts.setOnLoadCallback(drawAll);
+  }
+})();
+</script>

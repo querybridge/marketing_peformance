@@ -1,0 +1,143 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Budgets — Weekly Performance Dashboard{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">Budgets</h2>
+<p style="color:#6B7D94">Set monthly revenue budget and MTS target by vertical.</p>
+
+<!-- ── Selectors ────────────────────────────────────────────── -->
+<form method="get" action="{% url 'dashboard:budgets' %}" class="ui form" style="margin-bottom:1.5em">
+  <div class="three fields">
+    <div class="field">
+      <label>Vertical</label>
+      <select name="vertical" class="ui dropdown" onchange="this.form.submit()">
+        <option value="">Select vertical…</option>
+        {% for v in verticals %}
+        <option value="{{ v.id }}" {% if v.id == selected_vertical %}selected{% endif %}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Year</label>
+      <select name="year" class="ui dropdown" onchange="this.form.submit()">
+        <option value="">Year…</option>
+        {% for y in year_choices %}
+        <option value="{{ y }}" {% if y == selected_year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>Month</label>
+      <select name="month" class="ui dropdown" onchange="this.form.submit()">
+        <option value="">Month…</option>
+        {% for num, label in month_choices %}
+        <option value="{{ num }}" {% if num == selected_month %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</form>
+
+{% if saved %}
+<div class="ui success message">
+  <i class="check circle icon"></i>
+  Budgets saved for <strong>{{ vertical.name }}</strong> — {{ month_obj.year_month }}.
+</div>
+{% endif %}
+
+<!-- ── Budget Editor ────────────────────────────────────────── -->
+{% if vertical and month_obj %}
+<form method="post" action="{% url 'dashboard:budgets' %}?vertical={{ selected_vertical }}&year={{ selected_year }}&month={{ selected_month }}" class="ui form">
+  {% csrf_token %}
+  <input type="hidden" name="vertical" value="{{ selected_vertical }}">
+  <input type="hidden" name="year" value="{{ selected_year }}">
+  <input type="hidden" name="month" value="{{ selected_month }}">
+
+  <div class="ui segment">
+    <h3 class="ui header">
+      {{ vertical.name }} — {{ month_obj.year_month }}
+    </h3>
+
+    <!-- MTS target — one value for the entire vertical -->
+    <div class="field" style="max-width:320px;margin-bottom:1.2em">
+      <label>MTS Target for {{ vertical.name }} <span style="color:#6B7D94;font-weight:normal">(Cost &divide; Revenue)</span></label>
+      <div class="ui right labeled input" style="width:100%">
+        <input type="number" name="mts_pct"
+               value="{{ mts_display }}"
+               step="0.01" min="0" max="100"
+               placeholder="e.g. 25.00"
+               style="text-align:right">
+        <div class="ui basic label">%</div>
+      </div>
+    </div>
+
+    <table class="ui compact celled striped table">
+      <thead>
+        <tr>
+          <th>Brand</th>
+          <th class="right aligned" style="width:220px">Revenue Budget ($)</th>
+          <th class="right aligned" style="width:180px">Cancellation Rate (%)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><strong>{{ row.brand.name }}</strong></td>
+          <td class="right aligned">
+            <div class="ui input" style="width:100%">
+              <input type="number" name="rev_{{ row.brand.id }}"
+                     value="{{ row.revenue_budget }}"
+                     step="0.01" min="0"
+                     placeholder="e.g. 50000.00"
+                     style="text-align:right">
+            </div>
+          </td>
+          <td class="right aligned">
+            <div class="ui right labeled input" style="width:100%">
+              <input type="number" name="cancel_{{ row.brand.id }}"
+                     value="{{ row.cancellation_rate }}"
+                     step="0.01" min="0" max="100"
+                     placeholder="e.g. 8.00"
+                     style="text-align:right">
+              <div class="ui basic label">%</div>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="center aligned">No brands in this vertical.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if vertical_cancel_rate != None %}
+      <tfoot>
+        <tr>
+          <td><strong>Vertical Average</strong></td>
+          <td></td>
+          <td class="right aligned"><strong>{{ vertical_cancel_rate }}%</strong></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+
+    {% if rows %}
+    <div style="margin-top:1em">
+      <button type="submit" class="ui primary button">
+        <i class="save icon"></i> Save Budgets
+      </button>
+      <span style="color:#6B7D94;margin-left:1em;font-size:0.9em">
+        Leave revenue blank to remove a brand's budget for this month.
+      </span>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+{% elif not vertical or not month_obj %}
+<div class="ui message">
+  <i class="info circle icon"></i>
+  Select a vertical, year, and month to view or edit budgets.
+</div>
+{% endif %}
+
+{% endblock %}

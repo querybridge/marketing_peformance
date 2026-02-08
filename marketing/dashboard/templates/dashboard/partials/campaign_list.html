@@ -1,0 +1,46 @@
+{% load dashboard_filters %}
+
+<table class="ui compact celled striped table">
+  <thead>
+    <tr>
+      <th>Campaign</th>
+      <th>Channel</th>
+      <th>Status</th>
+      <th class="right aligned">Budget</th>
+      <th class="right aligned">Spend</th>
+      <th class="right aligned">Revenue</th>
+      <th class="right aligned">MTS</th>
+      <th class="right aligned">Conv.</th>
+      <th>Pacing</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for c in campaigns %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td>{{ c.channel }}</td>
+      <td>
+        <span class="ui {% if c.status == 'active' %}green{% elif c.status == 'paused' %}orange{% else %}grey{% endif %} tiny label">
+          {{ c.status|title }}
+        </span>
+      </td>
+      <td class="right aligned">{{ c.budget|currency }}</td>
+      <td class="right aligned">{{ c.spend|currency }}</td>
+      <td class="right aligned">{{ c.revenue|currency }}</td>
+      <td class="right aligned {% if c.mts >= c.mts_target %}positive{% else %}negative{% endif %}">
+        {{ c.mts }}x
+      </td>
+      <td class="right aligned">{{ c.conversions|intcomma }}</td>
+      <td>
+        <div class="pacing-bar">
+          <div class="pacing-fill {% if c.pacing > 110 %}bg-red{% elif c.pacing > 90 %}bg-green{% else %}bg-blue{% endif %}"
+               style="width:{{ c.pacing|floatformat:0 }}%"></div>
+        </div>
+        <span class="pacing-label">{{ c.pacing|pct }}</span>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="9" class="center aligned">No campaigns match this filter.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

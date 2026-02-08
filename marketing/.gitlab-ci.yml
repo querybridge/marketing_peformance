@@ -1,0 +1,54 @@
+stages:
+  - test
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip/
+
+# ── Test ──────────────────────────────────────────────────────
+test:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install -r requirements.txt
+    - python manage.py migrate --run-syncdb
+    - python manage.py check --deploy --fail-level WARNING
+    - python manage.py test dashboard --verbosity 2
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# ── Deploy to PythonAnywhere ─────────────────────────────────
+deploy:
+  stage: deploy
+  image: python:3.12-slim
+  script:
+    # Pull latest code on PA via their API
+    - pip install requests
+    - |
+      python -c "
+      import requests, os
+      token = os.environ['PA_API_TOKEN']
+      user  = os.environ['PA_USERNAME']
+      host  = 'www.pythonanywhere.com'
+      # 1. Run git pull in the project console
+      requests.post(
+          f'https://{host}/api/v0/user/{user}/consoles/',
+          headers={'Authorization': f'Token {token}'},
+          data={'executable': 'bash', 'arguments': '-c \"cd ~/marketing && git pull && pip install -r requirements.txt && python manage.py migrate\"'},
+      )
+      # 2. Reload the web app
+      requests.post(
+          f'https://{host}/api/v0/user/{user}/webapps/{user}.pythonanywhere.com/reload/',
+          headers={'Authorization': f'Token {token}'},
+      )
+      "
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  environment:
+    name: production
+    url: https://$PA_USERNAME.pythonanywhere.com

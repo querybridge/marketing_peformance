@@ -1,0 +1,72 @@
+{% extends "dashboard/base.html" %}
+{% load dashboard_filters %}
+
+{% block content %}
+
+<!-- ── Filter Bar ────────────────────────────────────────────── -->
+<form id="filter-form" hx-get="/" hx-target="#dashboard-content" hx-push-url="true" hx-indicator="#loading" hx-trigger="submit, change from:.auto-filter delay:150ms">
+  <div class="ui form">
+    <div class="equal width fields">
+
+      <div class="field">
+        <label>Vertical</label>
+        <select name="vertical" class="ui dropdown auto-filter">
+          <option value="">All Verticals</option>
+          {% for v in verticals %}
+          <option value="{{ v.id }}" {% if v.id == vertical_id %}selected{% endif %}>{{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Period</label>
+        <select name="preset" class="ui dropdown auto-filter" onchange="toggleCustom(this)">
+          {% for val, label in presets %}
+          <option value="{{ val }}" {% if val == preset %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Compare</label>
+        <select name="cmp" class="ui dropdown auto-filter">
+          {% for val, label in comparisons %}
+          <option value="{{ val }}" {% if val == comparison %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Revenue</label>
+        <select name="rev" class="ui dropdown auto-filter">
+          <option value="net" {% if rev_type == "net" %}selected{% endif %}>Net Revenue</option>
+          <option value="new" {% if rev_type == "new" %}selected{% endif %}>New Revenue</option>
+        </select>
+      </div>
+
+    </div>
+
+    <!-- Custom date inputs (hidden by default) -->
+    <div id="custom-dates" class="fields" style="display:{% if preset == 'custom' %}flex{% else %}none{% endif %}">
+      <div class="field"><label>Start</label><input type="date" name="start" class="auto-filter"></div>
+      <div class="field"><label>End</label><input type="date" name="end" class="auto-filter"></div>
+    </div>
+  </div>
+</form>
+
+<div id="loading" class="ui active centered inline loader htmx-indicator" style="margin:1em 0"></div>
+<div class="ui divider"></div>
+
+<!-- ── Dashboard Content (HTMX swap target) ─────────────────── -->
+<div id="dashboard-content">
+  {% include "dashboard/partials/dashboard_content.html" %}
+</div>
+
+<script>
+function toggleCustom(el) {
+  document.getElementById('custom-dates').style.display =
+    el.value === 'custom' ? 'flex' : 'none';
+}
+</script>
+
+{% endblock %}

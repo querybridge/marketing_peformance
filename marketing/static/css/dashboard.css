@@ -1,0 +1,119 @@
+/*
+ * Theme palette
+ * ─────────────
+ * Navy:      #313E4F   — nav bar, headings, primary text
+ * Blue:      #256FAD   — accents, links, active states
+ * Ice:       #DAEDFF   — tinted backgrounds, table headers, hover
+ * White:     #FFFFFF   — page background, cards, inputs
+ *
+ * Derived:
+ * Ice-light: #EBF4FF   — subtle stripe / drill background
+ * Border:    #C4D9F2   — table cells, dividers
+ * Muted:     #6B7D94   — secondary text, grey labels
+ */
+
+/* ── Page ────────────────────────────────────────────────────── */
+body {
+  background: #F4F8FC;
+  color: #313E4F;
+  font-family: 'Lato', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+/* ── Clickable rows ──────────────────────────────────────────── */
+.clickable { cursor: pointer; }
+.clickable:hover { background: #DAEDFF !important; }
+
+/* ── Delta coloring ──────────────────────────────────────────── */
+.delta-up   { color: #1a8a38; }
+.delta-down { color: #c41e1e; }
+.delta-flat { color: #6B7D94; }
+
+/* ── Alert badges ────────────────────────────────────────────── */
+.alert-needs_attention  { background: #d43535 !important; color: #fff !important; }
+.alert-doing_well       { background: #1a8a38 !important; color: #fff !important; }
+.alert-overly_efficient { background: #256FAD !important; color: #fff !important; }
+.alert-pacing_risk      { background: #d4800e !important; color: #fff !important; }
+.alert-missing_budget   { background: #C4D9F2 !important; color: #4a607a !important; }
+.alert-missing_revenue  { background: #C4D9F2 !important; color: #4a607a !important; }
+
+/* ── Drill-down ──────────────────────────────────────────────── */
+.drill-body { padding-left: 1em; }
+.drill-header th { background: #DAEDFF !important; color: #313E4F !important; font-size: 0.9em; }
+.drill-container td { background: #EBF4FF !important; }
+
+/* ── Table refinements ───────────────────────────────────────── */
+.brand-table td { font-size: 0.92em; }
+.text.grey { color: #6B7D94 !important; }
+
+/* ── HTMX loading ────────────────────────────────────────────── */
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator { display: inline-block; }
+
+/* ── Cards / Segments ────────────────────────────────────────── */
+.ui.segment {
+  background: #fff !important;
+  color: #313E4F !important;
+  border: 1px solid #C4D9F2 !important;
+  box-shadow: 0 1px 4px rgba(37, 111, 173, .06) !important;
+}
+
+/* ── Tables ──────────────────────────────────────────────────── */
+.ui.table { background: #fff !important; color: #313E4F !important; }
+.ui.table thead th {
+  background: #DAEDFF !important;
+  color: #313E4F !important;
+  font-weight: 600 !important;
+  border-bottom: 2px solid #256FAD !important;
+}
+.ui.celled.table tr td,
+.ui.celled.table tr th { border-color: #C4D9F2 !important; }
+.ui.striped.table > tbody > tr:nth-child(2n) { background: #F4F8FC !important; }
+.ui.table td { color: #313E4F !important; }
+
+/* ── Headers ─────────────────────────────────────────────────── */
+.ui.header,
+h2.ui.header,
+h3.ui.header,
+h4.ui.header { color: #313E4F !important; }
+.ui.header .sub.header { color: #6B7D94 !important; }
+
+/* ── Forms ────────────────────────────────────────────────────── */
+.ui.form label { color: #313E4F !important; font-weight: 600 !important; }
+.ui.form select,
+.ui.form input[type="date"] {
+  background: #fff !important;
+  color: #313E4F !important;
+  border: 1px solid #C4D9F2 !important;
+}
+.ui.form select:focus,
+.ui.form input[type="date"]:focus {
+  border-color: #256FAD !important;
+  box-shadow: 0 0 0 1px #256FAD !important;
+}
+
+/* ── Dividers ────────────────────────────────────────────────── */
+.ui.divider { border-color: #C4D9F2 !important; }
+
+/* ── Messages (alert spec page, etc.) ────────────────────────── */
+.ui.message {
+  background: #EBF4FF !important;
+  color: #313E4F !important;
+  box-shadow: 0 0 0 1px #C4D9F2 inset !important;
+}
+.ui.message .header { color: #256FAD !important; }
+
+/* ── Labels / Period badges ──────────────────────────────────── */
+.ui.label { background: #DAEDFF; color: #313E4F; }
+.ui.grey.label { background: #C4D9F2 !important; color: #4a607a !important; }
+
+/* ── Sortable columns ────────────────────────────────────────── */
+th.sortable-col { cursor: pointer; user-select: none; }
+th.sortable-col:hover { background: #c4dcf5 !important; }
+th.sortable-col .sort-icon { font-size: 0.8em; }
+
+/* ── Structured table (alert spec) ───────────────────────────── */
+.ui.structured.table thead tr:first-child th {
+  background: #DAEDFF !important;
+  border-bottom: 2px solid #256FAD !important;
+}

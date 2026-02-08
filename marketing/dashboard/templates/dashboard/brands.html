@@ -1,0 +1,131 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Brands — Weekly Performance Dashboard{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">Brands</h2>
+<p style="color:#6B7D94">Manage brands within verticals.</p>
+
+{% if error %}
+<div class="ui error message">
+  <i class="exclamation triangle icon"></i> {{ error }}
+</div>
+{% endif %}
+
+<!-- ── Filter by Vertical ────────────────────────────────────── -->
+<form method="get" action="{% url 'dashboard:brands' %}" class="ui form" style="margin-bottom:1.5em">
+  <div class="field" style="max-width:320px">
+    <label>Vertical</label>
+    <select name="vertical" class="ui dropdown" onchange="this.form.submit()">
+      <option value="">All verticals</option>
+      {% for v in verticals %}
+      <option value="{{ v.id }}" {% if v.id == selected_vertical %}selected{% endif %}>{{ v.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+<!-- ── Add Brand ─────────────────────────────────────────────── -->
+<form method="post" action="{% url 'dashboard:brands' %}{% if selected_vertical %}?vertical={{ selected_vertical }}{% endif %}" class="ui form" style="margin-bottom:1.5em">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="add">
+  <div class="fields">
+    <div class="eight wide field">
+      <input type="text" name="name" placeholder="New brand name…" required>
+    </div>
+    <div class="five wide field">
+      <select name="vertical_id" class="ui dropdown" required>
+        <option value="">Vertical…</option>
+        {% for v in verticals %}
+        <option value="{{ v.id }}" {% if v.id == selected_vertical %}selected{% endif %}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="three wide field">
+      <button type="submit" class="ui primary fluid button">
+        <i class="plus icon"></i> Add Brand
+      </button>
+    </div>
+  </div>
+</form>
+
+<!-- ── Brands Table ──────────────────────────────────────────── -->
+<table class="ui compact celled striped table">
+  <thead>
+    <tr>
+      <th>Brand</th>
+      <th>Vertical</th>
+      <th>Slug</th>
+      <th class="center aligned" style="width:110px">Campaigns</th>
+      <th style="width:320px">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>
+        <strong id="brand-display-{{ row.brand.id }}">{{ row.brand.name }}</strong>
+        <form method="post" action="{% url 'dashboard:brands' %}{% if selected_vertical %}?vertical={{ selected_vertical }}{% endif %}"
+              id="brand-edit-{{ row.brand.id }}" class="ui form"
+              style="display:none;margin:0">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="edit">
+          <input type="hidden" name="id" value="{{ row.brand.id }}">
+          <div class="fields" style="margin:0">
+            <div class="ten wide field" style="margin:0">
+              <input type="text" name="name" value="{{ row.brand.name }}" required>
+            </div>
+            <div class="six wide field" style="margin:0">
+              <select name="vertical_id" class="ui dropdown">
+                {% for v in verticals %}
+                <option value="{{ v.id }}" {% if v.id == row.brand.vertical_id %}selected{% endif %}>{{ v.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:0.4em">
+            <button type="submit" class="ui small positive button">Save</button>
+            <button type="button" class="ui small button"
+                    onclick="toggleBrandEdit({{ row.brand.id }}, false)">Cancel</button>
+          </div>
+        </form>
+      </td>
+      <td>{{ row.brand.vertical.name }}</td>
+      <td style="color:#6B7D94">{{ row.brand.slug }}</td>
+      <td class="center aligned">{{ row.campaign_count }}</td>
+      <td>
+        <button class="ui small button" onclick="toggleBrandEdit({{ row.brand.id }}, true)">
+          <i class="edit icon"></i> Edit
+        </button>
+        {% if row.campaign_count == 0 %}
+        <form method="post" action="{% url 'dashboard:brands' %}{% if selected_vertical %}?vertical={{ selected_vertical }}{% endif %}" style="display:inline">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="{{ row.brand.id }}">
+          <button type="submit" class="ui small negative button"
+                  onclick="return confirm('Delete {{ row.brand.name }}?')">
+            <i class="trash icon"></i> Delete
+          </button>
+        </form>
+        {% else %}
+        <span class="ui small basic disabled button" data-tooltip="Remove campaigns first" data-position="top center">
+          <i class="trash icon"></i> Delete
+        </span>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="center aligned">No brands found. Add one above.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function toggleBrandEdit(id, show) {
+  document.getElementById('brand-display-' + id).style.display = show ? 'none' : '';
+  document.getElementById('brand-edit-' + id).style.display = show ? '' : 'none';
+}
+</script>
+
+{% endblock %}

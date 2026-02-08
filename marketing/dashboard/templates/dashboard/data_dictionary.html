@@ -1,0 +1,44 @@
+{% extends "dashboard/base.html" %}
+
+{% block content %}
+<h2 class="ui header">Data Dictionary</h2>
+<p>Search and reference for every metric in the dashboard.</p>
+
+<form method="get" class="ui form" style="margin-bottom:1.5em">
+  <div class="ui action input" style="width:100%;max-width:400px">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search metrics...">
+    <button class="ui button" type="submit">Search</button>
+  </div>
+</form>
+
+<table class="ui compact celled striped table" style="font-size:.92em">
+  <thead>
+    <tr>
+      <th>Metric</th>
+      <th>Definition</th>
+      <th>Source</th>
+      <th>Grain</th>
+      <th>Additive?</th>
+      <th>Rollup Formula</th>
+      <th>Null / Zero Handling</th>
+      <th>Display</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in metrics %}
+    <tr>
+      <td><strong>{{ m.name }}</strong></td>
+      <td>{{ m.definition }}</td>
+      <td>{{ m.source }}</td>
+      <td>{{ m.grain }}</td>
+      <td class="center aligned">{{ m.additive }}</td>
+      <td><code>{{ m.rollup }}</code></td>
+      <td>{{ m.nulls }}</td>
+      <td>{{ m.display }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="8" class="center aligned">No metrics match "{{ query }}".</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

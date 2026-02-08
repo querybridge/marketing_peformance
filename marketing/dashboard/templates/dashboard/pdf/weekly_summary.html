@@ -1,0 +1,83 @@
+{% load dashboard_filters %}
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Weekly Summary — {{ current_start|date:"M d" }} – {{ current_end|date:"M d, Y" }}</title>
+<style>
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; color: #333; margin: 2cm; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  h2 { font-size: 14px; margin-top: 20px; margin-bottom: 6px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  .subtitle { font-size: 11px; color: #888; margin-bottom: 16px; }
+  .alerts { margin-bottom: 16px; }
+  .alert-badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 10px; font-weight: 600; margin-right: 6px; color: #fff; }
+  .bg-red { background: #db2828; }
+  .bg-green { background: #21ba45; }
+  .bg-blue { background: #2185d0; }
+  .bg-orange { background: #f2711c; }
+  .bg-grey { background: #999; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #e0e0e0; font-size: 10px; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .r { text-align: right; }
+  .up { color: #21ba45; }
+  .down { color: #db2828; }
+  .footer { margin-top: 30px; font-size: 9px; color: #aaa; border-top: 1px solid #ddd; padding-top: 6px; }
+</style>
+</head>
+<body>
+
+<h1>Weekly Performance Summary</h1>
+<div class="subtitle">
+  {{ current_start|date:"M d" }} – {{ current_end|date:"M d, Y" }}
+  &nbsp;|&nbsp; {{ period_label }}
+  &nbsp;|&nbsp; Revenue type: {{ rev_type|upper }}
+</div>
+
+{% if exceptions %}
+<div class="alerts">
+  {% for key, a in exceptions.items %}
+  <span class="alert-badge bg-{{ a.color }}">{{ a.label }}: {{ a.count }}</span>
+  {% endfor %}
+</div>
+{% endif %}
+
+<h2>Brand Performance</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Brand</th>
+      <th>Vertical</th>
+      <th class="r">Spend</th>
+      <th class="r">Δ</th>
+      <th class="r">Revenue</th>
+      <th class="r">Δ</th>
+      <th class="r">MTS</th>
+      <th class="r">Δ</th>
+      <th class="r">Orders</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in brand_rows %}
+    <tr>
+      <td><strong>{{ row.name }}</strong></td>
+      <td>{{ row.vertical }}</td>
+      <td class="r">{{ row.spend|currency }}</td>
+      <td class="r {% if row.spend_delta > 0 %}up{% elif row.spend_delta < 0 %}down{% endif %}">{{ row.spend_delta|pct }}</td>
+      <td class="r">{{ row.revenue|currency }}</td>
+      <td class="r {% if row.revenue_delta > 0 %}up{% elif row.revenue_delta < 0 %}down{% endif %}">{{ row.revenue_delta|pct }}</td>
+      <td class="r">{{ row.mts|mts_fmt }}</td>
+      <td class="r">{{ row.mts_delta|bps }}</td>
+      <td class="r">{{ row.orders|intcomma }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div class="footer">
+  Generated {{ "now"|date:"Y-m-d H:i" }} &nbsp;|&nbsp; MTS = Cost &divide; Revenue (lower is better)
+  &nbsp;|&nbsp; Revenue below brand level is allocated by spend share
+</div>
+
+</body>
+</html>
