@@ -145,6 +145,12 @@ def alert_icon(key):
 
 
 @register.filter
+def alert_color(key):
+    """Alert key → Semantic UI color class."""
+    return ALERT_META.get(key, {}).get("color", "grey")
+
+
+@register.filter
 def alert_tooltip(key):
     """Alert key → one-sentence tooltip."""
     return ALERT_META.get(key, {}).get("tooltip", "")

@@ -214,26 +214,12 @@
 <p>Scan the table for color-coded alert badges:</p>
 <table class="ui very basic compact table">
   <tbody>
+    {% for a in help_alerts %}
     <tr>
-      <td style="width:200px"><span style="color:#db2828"><strong>Needs Attention</strong></span></td>
-      <td>Revenue is down significantly vs prior year. Investigate immediately.</td>
+      <td style="width:200px"><span class="ui {{ a.color }} label">{{ a.label }}</span></td>
+      <td>{{ a.tooltip }}</td>
     </tr>
-    <tr>
-      <td><span style="color:#f2711c"><strong>Pacing Risk</strong></span></td>
-      <td>Revenue is declining but spend isn't. Budget may be wasted.</td>
-    </tr>
-    <tr>
-      <td><span style="color:#a333c8"><strong>Under Efficient</strong></span></td>
-      <td>MTS is above target. Consider reducing spend or reallocating to better-performing brands.</td>
-    </tr>
-    <tr>
-      <td><span style="color:#2185d0"><strong>Overly Efficient</strong></span></td>
-      <td>MTS is below target. This brand may have room to scale&mdash;consider increasing spend.</td>
-    </tr>
-    <tr>
-      <td><span style="color:#21ba45"><strong>Doing Well</strong></span></td>
-      <td>Revenue is growing and MTS is on target. No action needed.</td>
-    </tr>
+    {% endfor %}
   </tbody>
 </table>
 

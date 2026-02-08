@@ -126,7 +126,7 @@
         <td class="right aligned {{ row.mts_vs_budget|mts_vs_goal_class }}" data-sort-value="{{ row.mts_vs_budget|default_if_none:'0' }}">{{ row.mts_vs_budget|bps }}</td>
         <td>
           {% for a in row.alerts %}
-          <span class="ui mini label alert-{{ a }}"
+          <span class="ui mini {{ a|alert_color }} label"
                 data-tooltip="{{ a|alert_tooltip }}"
                 data-position="top center"
                 data-variation="small">

@@ -476,7 +476,7 @@ def compare_delta(cur, cmp):
 
 ALERT_META = {
     "needs_attention": {
-        "label": "Needs Attn",
+        "label": "Needs Attention",
         "color": "red",
         "icon": "exclamation triangle",
         "severity": "High",
@@ -506,7 +506,7 @@ ALERT_META = {
         "drill_target": "Source",
     },
     "overly_efficient": {
-        "label": "Over Eff.",
+        "label": "Overly Efficient",
         "color": "blue",
         "icon": "arrow up",
         "severity": "Med",
@@ -521,8 +521,8 @@ ALERT_META = {
         "drill_target": "Campaign Type",
     },
     "under_efficient": {
-        "label": "Under Eff.",
-        "color": "red",
+        "label": "Under Efficient",
+        "color": "purple",
         "icon": "arrow down",
         "severity": "Med",
         "tooltip": (

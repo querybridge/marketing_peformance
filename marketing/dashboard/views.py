@@ -1617,4 +1617,13 @@ def match_campaigns(request):
 # ───────────────────────────────────────────────────────────────────────────
 
 def help_page(request):
-    return render(request, "dashboard/help.html")
+    # Canonical alert statuses for the help page status table
+    help_alerts = []
+    for key in ALERT_DISPLAY_ORDER:
+        meta = services.ALERT_META[key]
+        help_alerts.append({
+            "label": meta["label"],
+            "color": meta["color"],
+            "tooltip": meta["tooltip"],
+        })
+    return render(request, "dashboard/help.html", {"help_alerts": help_alerts})
