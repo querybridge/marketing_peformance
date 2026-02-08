@@ -26,6 +26,7 @@ from .models import (
     FactBudget,
     FactMediaDaily,
     FactOrdersDaily,
+    FactVerticalBudget,
 )
 
 _Z = Decimal("0")
@@ -386,6 +387,23 @@ def budgets_for_period(window, rev_type="net"):
     return result
 
 
+def vertical_mts_for_period(window):
+    """Return {vertical_id: mts_budget} from FactVerticalBudget for the period.
+
+    When the window spans multiple months, uses the latest month's MTS goal.
+    """
+    qs = FactVerticalBudget.objects.filter(
+        month__date__gte=_month_start(window.start),
+        month__date__lte=window.end,
+    ).select_related("month").order_by("month__date")
+
+    result = {}
+    for vb in qs:
+        # Later months overwrite earlier ones → latest MTS goal wins
+        result[vb.vertical_id] = float(vb.mts_budget)
+    return result
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # METRIC HELPERS
 # ═══════════════════════════════════════════════════════════════════════════
@@ -700,6 +718,7 @@ def brand_table(period, vertical_id=None, rev_type="net"):
     oy = orders_by_brand(yoy_win, vertical_id, rev_type)
 
     budgets = budgets_for_period(period.current, rev_type)
+    vert_mts = vertical_mts_for_period(period.current)
 
     brands = DimBrand.objects.select_related("vertical")
     if vertical_id:
@@ -722,6 +741,9 @@ def brand_table(period, vertical_id=None, rev_type="net"):
         bgt = budgets.get(bid, {})
         rev_budget = float(bgt.get("revenue_budget", 0))
         mts_budget = bgt.get("mts_budget", 0)
+        # Fall back to vertical-level MTS goal when brand has no own budget
+        if not mts_budget and b.vertical_id:
+            mts_budget = vert_mts.get(b.vertical_id, 0)
 
         cur_mts = _div(cur_spend, cur_rev)
         cmp_mts = _div(cmp_spend, cmp_rev)
