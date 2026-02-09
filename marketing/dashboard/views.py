@@ -84,6 +84,12 @@ def index(request):
     bid = p["brand_id"]
 
     all_brand_rows = services.brand_table(period, vid, rev)
+
+    # When focused on a single brand, narrow the table and badges to
+    # that brand only; charts are already scoped via daily_trend().
+    if bid:
+        all_brand_rows = [r for r in all_brand_rows if r["id"] == bid]
+
     exceptions = services.exceptions_summary(all_brand_rows)
     trend = services.daily_trend(
         period, vid, rev, preset=p["preset"], brand_id=bid,
@@ -92,12 +98,9 @@ def index(request):
     # When focused on a single brand, use that brand's MTS budget;
     # otherwise compute the spend-weighted aggregate across all brands.
     mts_budget_agg = None
-    if bid:
-        focused_row = next(
-            (r for r in all_brand_rows if r["id"] == bid), None,
-        )
-        if focused_row and focused_row.get("mts_budget"):
-            mts_budget_agg = float(focused_row["mts_budget"])
+    if bid and all_brand_rows:
+        if all_brand_rows[0].get("mts_budget"):
+            mts_budget_agg = float(all_brand_rows[0]["mts_budget"])
     else:
         total_spend = sum(float(r.get("spend") or 0) for r in all_brand_rows)
         if total_spend > 0:

@@ -86,7 +86,6 @@
     background: #f9fafb;
   }
   tr.brand-row.brand-focused { background: #e8f4fd !important; }
-  tr.brand-row.brand-unfocused { opacity: 0.45; }
 </style>
 <div class="ui segment">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em">
@@ -121,7 +120,7 @@
     </thead>
     <tbody>
       {% for row in brand_rows %}
-      <tr class="brand-row clickable {% if focused_brand %}{% if row.id == focused_brand.id %}brand-focused{% else %}brand-unfocused{% endif %}{% endif %}"
+      <tr class="brand-row clickable {% if focused_brand and row.id == focused_brand.id %}brand-focused{% endif %}"
           data-brand-id="{{ row.id }}"
           data-brand-name="{{ row.name|lower }}"
           onclick="toggleBrandFocus({{ row.id }})">
