@@ -10,7 +10,7 @@
 
       <div class="field">
         <label>Vertical</label>
-        <select name="vertical" class="ui dropdown auto-filter">
+        <select name="vertical" class="ui dropdown auto-filter" onchange="var bi=document.getElementById('brand-focus-input');if(bi)bi.value='';">
           <option value="">All Verticals</option>
           {% for v in verticals %}
           <option value="{{ v.id }}" {% if v.id == vertical_id %}selected{% endif %}>{{ v.name }}</option>
@@ -51,6 +51,9 @@
       <div class="field"><label>Start</label><input type="date" name="start" class="auto-filter"></div>
       <div class="field"><label>End</label><input type="date" name="end" class="auto-filter"></div>
     </div>
+
+    <!-- Brand focus (set via JS toggleBrandFocus) -->
+    <input type="hidden" name="brand" id="brand-focus-input" value="{{ brand_id|default:'' }}">
   </div>
 </form>
 

@@ -39,6 +39,16 @@ def _params(request):
     rev_type = g.get("rev", "net")
     vertical_id = int(g["vertical"]) if g.get("vertical") else None
 
+    # Brand focus — validate that the brand exists
+    brand_id = None
+    if g.get("brand"):
+        try:
+            _bid = int(g["brand"])
+            if DimBrand.objects.filter(id=_bid).exists():
+                brand_id = _bid
+        except (ValueError, TypeError):
+            pass
+
     period = services.resolve_period(
         preset=preset,
         comparison=comparison,
@@ -53,6 +63,7 @@ def _params(request):
         "comparison": comparison,
         "rev_type": rev_type,
         "vertical_id": vertical_id,
+        "brand_id": brand_id,
         "period": period,
         "filter_qs": request.GET.urlencode(),
         "filter_qs_no_page": "&".join(
@@ -70,25 +81,41 @@ def index(request):
     period = p["period"]
     vid = p["vertical_id"]
     rev = p["rev_type"]
+    bid = p["brand_id"]
 
     all_brand_rows = services.brand_table(period, vid, rev)
     exceptions = services.exceptions_summary(all_brand_rows)
-    trend = services.daily_trend(period, vid, rev, preset=p["preset"])
+    trend = services.daily_trend(
+        period, vid, rev, preset=p["preset"], brand_id=bid,
+    )
 
-    # Compute aggregate MTS budget (spend-weighted average across brands)
-    total_spend = sum(float(r.get("spend") or 0) for r in all_brand_rows)
+    # When focused on a single brand, use that brand's MTS budget;
+    # otherwise compute the spend-weighted aggregate across all brands.
     mts_budget_agg = None
-    if total_spend > 0:
-        weighted = sum(
-            float(r.get("mts_budget") or 0) * float(r.get("spend") or 0)
-            for r in all_brand_rows
-            if r.get("mts_budget")
+    if bid:
+        focused_row = next(
+            (r for r in all_brand_rows if r["id"] == bid), None,
         )
-        brands_with_budget = sum(
-            1 for r in all_brand_rows if r.get("mts_budget")
-        )
-        if brands_with_budget:
-            mts_budget_agg = weighted / total_spend
+        if focused_row and focused_row.get("mts_budget"):
+            mts_budget_agg = float(focused_row["mts_budget"])
+    else:
+        total_spend = sum(float(r.get("spend") or 0) for r in all_brand_rows)
+        if total_spend > 0:
+            weighted = sum(
+                float(r.get("mts_budget") or 0) * float(r.get("spend") or 0)
+                for r in all_brand_rows
+                if r.get("mts_budget")
+            )
+            brands_with_budget = sum(
+                1 for r in all_brand_rows if r.get("mts_budget")
+            )
+            if brands_with_budget:
+                mts_budget_agg = weighted / total_spend
+
+    # Resolve focused brand object for template
+    focused_brand = None
+    if bid:
+        focused_brand = DimBrand.objects.filter(id=bid).first()
 
     paginator = Paginator(all_brand_rows, 20)
     page_number = request.GET.get("page", 1)
@@ -111,6 +138,7 @@ def index(request):
         "current_days": period.current.days,
         "compare_start": period.compare.start,
         "compare_end": period.compare.end,
+        "focused_brand": focused_brand,
     }
 
     if request.headers.get("HX-Request"):

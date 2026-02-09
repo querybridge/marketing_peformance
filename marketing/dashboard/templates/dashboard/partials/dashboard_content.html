@@ -7,6 +7,13 @@
   <span class="ui tiny grey label">{{ period_label }}: {{ compare_start|date:"M d" }} – {{ compare_end|date:"M d" }}</span>
 </div>
 
+{% if focused_brand %}
+<div class="ui info message" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1em">
+  <span><i class="filter icon"></i> Charts filtered to <strong>{{ focused_brand.name }}</strong></span>
+  <button class="ui mini basic button" type="button" onclick="clearBrandFocus()">Clear</button>
+</div>
+{% endif %}
+
 <!-- ── Trend Charts ──────────────────────────────────────────── -->
 <div class="ui three column stackable grid">
   <div class="column">
@@ -78,6 +85,8 @@
     z-index: 2;
     background: #f9fafb;
   }
+  tr.brand-row.brand-focused { background: #e8f4fd !important; }
+  tr.brand-row.brand-unfocused { opacity: 0.45; }
 </style>
 <div class="ui segment">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em">
@@ -112,10 +121,11 @@
     </thead>
     <tbody>
       {% for row in brand_rows %}
-      <tr class="brand-row clickable"
+      <tr class="brand-row clickable {% if focused_brand %}{% if row.id == focused_brand.id %}brand-focused{% else %}brand-unfocused{% endif %}{% endif %}"
+          data-brand-id="{{ row.id }}"
           data-brand-name="{{ row.name|lower }}"
-          onclick="toggleDrill({{ row.id }}, '/drill/brand/{{ row.id }}/?{{ filter_qs }}')">
-        <td class="center aligned"><i class="caret right icon drill-icon" id="icon-{{ row.id }}"></i></td>
+          onclick="toggleBrandFocus({{ row.id }})">
+        <td class="center aligned" onclick="event.stopPropagation(); toggleDrill({{ row.id }}, '/drill/brand/{{ row.id }}/?{{ filter_qs }}')"><i class="caret right icon drill-icon" id="icon-{{ row.id }}"></i></td>
         <td><strong>{{ row.name }}</strong><br><small class="text grey">{{ row.vertical }}</small></td>
         <td class="right aligned" data-sort-value="{{ row.spend|default_if_none:'0' }}">{{ row.spend|currency }}</td>
         <td class="right aligned {{ row.spend_delta|good_up }}" data-sort-value="{{ row.spend_delta|default_if_none:'0' }}">{{ row.spend_delta|pct }}</td>
@@ -183,6 +193,33 @@
   {% endif %}
 
 </div>
+
+<!-- ── Brand Focus JS ───────────────────────────────────────── -->
+<script>
+var currentFocusBrandId = {{ brand_id|default:"null" }};
+
+function toggleBrandFocus(brandId) {
+  var input = document.getElementById('brand-focus-input');
+  if (!input) return;
+  if (currentFocusBrandId === brandId) {
+    input.value = '';
+    currentFocusBrandId = null;
+  } else {
+    input.value = brandId;
+    currentFocusBrandId = brandId;
+  }
+  var form = document.getElementById('filter-form');
+  if (form) htmx.trigger(form, 'submit');
+}
+
+function clearBrandFocus() {
+  var input = document.getElementById('brand-focus-input');
+  if (input) input.value = '';
+  currentFocusBrandId = null;
+  var form = document.getElementById('filter-form');
+  if (form) htmx.trigger(form, 'submit');
+}
+</script>
 
 <!-- ── Drill-down JS ─────────────────────────────────────────── -->
 <script>

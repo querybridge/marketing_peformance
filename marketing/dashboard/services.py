@@ -889,7 +889,8 @@ def drill_table(period, group_by, rev_type="net", **filters):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
+def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week",
+                brand_id=None):
     """Spend + revenue trend for current and comparison windows.
 
     Label precision follows the period filter:
@@ -897,6 +898,9 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
       - month presets → daily, labelled "02/01" (MM/DD)
       - quarter       → aggregated by month, labelled "Jan"
       - custom        → daily, labelled "2/3"
+
+    When *brand_id* is set, data is scoped to that single brand (overrides
+    vertical_id for the trend queries).
     """
     monthly = preset == "this_quarter"
 
@@ -919,7 +923,9 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
 
     def _build(window):
         kw = {}
-        if vertical_id:
+        if brand_id:
+            kw["campaign__brand_id"] = brand_id
+        elif vertical_id:
             kw["campaign__brand__vertical_id"] = vertical_id
 
         media_qs = (
@@ -934,7 +940,9 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week"):
         media_days = {r["date__date"]: r for r in media_qs}
 
         okw = {}
-        if vertical_id:
+        if brand_id:
+            okw["brand_id"] = brand_id
+        elif vertical_id:
             okw["brand__vertical_id"] = vertical_id
         rev_field = "net_revenue" if rev_type == "net" else "new_revenue"
         order_qs = (
