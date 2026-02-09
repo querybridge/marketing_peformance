@@ -1127,15 +1127,15 @@ COLUMN_MAPS = {
         "click_share":      "Click share",
     },
     "bing-ads": {
-        "campaign":         "Campaign name",
+        "campaign":         ["Campaign name", "Campaign"],
         "external_id":      "Campaign ID",
-        "campaign_type":    "Campaign type",
-        "date":             "Time period",
+        "campaign_type":    ["Ad distribution", "Campaign type"],
+        "date":             ["Time period", "Date"],
         "impressions":      "Impressions",
         "clicks":           "Clicks",
-        "cost":             "Spend",
+        "cost":             ["Spend", "Cost"],
         "conversions":      "Conversions",
-        "conversion_value": "Revenue",
+        "conversion_value": ["Revenue", "Revenue (Conv.)", "Conv. value"],
         "impression_share": "Impression share %",
         "click_share":      "Click share %",
     },
@@ -1176,7 +1176,7 @@ COLUMN_MAPS = {
 _GENERIC_NAMES = {
     "campaign":         ["campaign", "campaign name", "campaign_name"],
     "external_id":      ["campaign id", "campaign_id", "id"],
-    "campaign_type":    ["campaign type", "campaign_type", "type"],
+    "campaign_type":    ["campaign type", "campaign_type", "type", "ad distribution"],
     "date":             ["date", "day", "time period", "report date"],
     "impressions":      ["impressions", "impr.", "impr"],
     "clicks":           ["clicks", "link clicks", "sessions"],
@@ -1205,17 +1205,25 @@ def _parse_csv_date(val):
 
 
 def _build_column_index(headers, source_slug):
-    """Return {field_name: col_index} mapping from CSV headers."""
+    """Return {field_name: col_index} mapping from CSV headers.
+
+    COLUMN_MAPS values may be a single string or a list of variants
+    (tried in order; first match wins).
+    """
     lower_headers = [h.lower().strip() for h in headers]
     index = {}
 
     if source_slug in COLUMN_MAPS:
         mapping = COLUMN_MAPS[source_slug]
-        for field, col_name in mapping.items():
-            try:
-                index[field] = lower_headers.index(col_name.lower())
-            except ValueError:
-                pass
+        for field, col_names in mapping.items():
+            if isinstance(col_names, str):
+                col_names = [col_names]
+            for col_name in col_names:
+                try:
+                    index[field] = lower_headers.index(col_name.lower())
+                    break
+                except ValueError:
+                    continue
     else:
         for field, variants in _GENERIC_NAMES.items():
             for variant in variants:
@@ -1285,32 +1293,42 @@ def _parse_share(val):
 
 
 def _detect_header_row(lines, source_slug):
-    """Scan the first ~10 lines for the actual header row.
+    """Scan the first ~20 lines for the actual header row.
 
-    Google Ads exports include metadata rows before the real header.
-    We look for a line containing key column names from the source mapping
-    (or generic fallbacks).  Returns (header_row_index, header_fields) or
-    (None, None) if not found.
+    Google Ads and Bing Ads exports include metadata rows before the real
+    header.  We look for a line containing key column names from the source
+    mapping (or generic fallbacks).  Returns (header_row_index, header_fields)
+    or (None, None) if not found.
+
+    COLUMN_MAPS values may be a single string or a list of variants; for
+    detection we require at least one variant from each marker field to be
+    present in the candidate row.
     """
-    # Build a set of lowercase marker column names to search for.
-    # We require at least a "campaign" column + a "date" column + a "cost" column.
-    markers = set()
+    # Build one set of acceptable names per marker field (campaign, date, cost).
+    marker_groups = []
     if source_slug in COLUMN_MAPS:
         mapping = COLUMN_MAPS[source_slug]
         for field in ("campaign", "date", "cost"):
             if field in mapping:
-                markers.add(mapping[field].lower())
-    if not markers:
-        # Fallback: generic markers
-        markers = {"campaign", "day", "cost"}
+                val = mapping[field]
+                if isinstance(val, str):
+                    marker_groups.append({val.lower()})
+                else:
+                    marker_groups.append({v.lower() for v in val})
+    if not marker_groups:
+        marker_groups = [
+            {"campaign", "campaign name"},
+            {"day", "date", "time period"},
+            {"cost", "spend"},
+        ]
 
-    for idx, line in enumerate(lines[:10]):
+    for idx, line in enumerate(lines[:20]):
         # Parse this line as CSV to handle quoted fields
         parsed = list(csv.reader([line]))
         if not parsed or not parsed[0]:
             continue
         lower_cells = {c.strip().lower() for c in parsed[0]}
-        if markers <= lower_cells:
+        if all(group & lower_cells for group in marker_groups):
             return idx, parsed[0]
     return None, None
 
@@ -1319,10 +1337,12 @@ def upload_csv(request):
     sources = DimSource.objects.all()
     verticals = DimVertical.objects.all()
 
-    # Build column info for JS hints
+    # Build column info for JS hints (flatten list variants to first name)
     column_info = {}
     for slug, mapping in COLUMN_MAPS.items():
-        column_info[slug] = list(mapping.values())
+        column_info[slug] = [
+            v[0] if isinstance(v, list) else v for v in mapping.values()
+        ]
 
     ctx = {
         "sources": sources,
@@ -1394,7 +1414,7 @@ def upload_csv(request):
 
     # Verify required columns — cost is optional for Amazon feed-based listings
     is_amazon_feed = source.slug == "amazon-marketplace" and amazon_type == "feed"
-    requires_clicks = source.slug in ("meta-ads", "amazon-marketplace")
+    requires_clicks = source.slug in ("meta-ads", "amazon-marketplace", "bing-ads")
     required = ["campaign", "date", "conversions", "conversion_value"]
     if not is_amazon_feed:
         required.append("cost")
@@ -1402,7 +1422,13 @@ def upload_csv(request):
         required.append("clicks")
     missing = [req for req in required if req not in col_idx]
     if missing:
-        ctx["error"] = f"Could not find required columns: {', '.join(missing)}. Found headers: {', '.join(headers)}"
+        hdr_note = ""
+        if header_row_idx is not None:
+            hdr_note = f" (detected header on row {header_row_idx + 1})"
+        ctx["error"] = (
+            f"Could not find required columns: {', '.join(missing)}.{hdr_note} "
+            f"Found headers: {', '.join(headers)}"
+        )
         return render(request, "dashboard/upload.html", ctx)
 
     reader = csv.reader(io.StringIO("\n".join(data_lines)))
@@ -1459,6 +1485,12 @@ def upload_csv(request):
             campaign = campaigns_by_ext_id[ext_id]
         elif campaign_name and campaign_name.lower() in campaigns_by_name:
             campaign = campaigns_by_name[campaign_name.lower()]
+
+        # Safety guard: discard match if the campaign belongs to a different
+        # source (should not happen with source-scoped lookup, but prevents
+        # cross-source data contamination if stale data slips through).
+        if campaign and campaign.source_id != source.id:
+            campaign = None
 
         if not campaign:
             if not campaign_name:

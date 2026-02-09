@@ -148,6 +148,13 @@ class DimCampaign(models.Model):
 
     class Meta:
         ordering = ["source", "campaign_type", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["external_id", "source"],
+                name="unique_ext_id_per_source",
+                condition=models.Q(external_id__gt=""),
+            ),
+        ]
 
     def __str__(self):
         return f"{self.source} / {self.name}"
