@@ -702,9 +702,12 @@ def exceptions_summary(brand_rows):
 
 def brand_table(period, vertical_id=None, rev_type="net"):
     """
-    One row per brand.  Spend from FactMediaDaily, revenue from FactOrdersDaily.
+    One row per brand.  Spend from FactMediaDaily, revenue from FactOrdersDaily
+    (or conversion_value from FactMediaDaily when rev_type="platform").
     Deltas vs comparison period.  Alerts vs YOY + budget.
     """
+    use_platform_rev = rev_type == "platform"
+
     mc = media_by_brand(period.current, vertical_id)
     oc = orders_by_brand(period.current, vertical_id, rev_type)
     mp = media_by_brand(period.compare, vertical_id)
@@ -716,6 +719,8 @@ def brand_table(period, vertical_id=None, rev_type="net"):
         period.current.end - timedelta(weeks=52),
     )
     oy = orders_by_brand(yoy_win, vertical_id, rev_type)
+    if use_platform_rev:
+        my = media_by_brand(yoy_win, vertical_id)
 
     budgets = budgets_for_period(period.current, rev_type)
     vert_mts = vertical_mts_for_period(period.current)
@@ -728,15 +733,24 @@ def brand_table(period, vertical_id=None, rev_type="net"):
     for b in brands:
         bid = b.id
         cur_spend = float(mc.get(bid, {}).get("spend", 0))
-        cur_rev = float(oc.get(bid, {}).get("revenue", 0))
+        if use_platform_rev:
+            cur_rev = float(mc.get(bid, {}).get("conv_value", 0))
+        else:
+            cur_rev = float(oc.get(bid, {}).get("revenue", 0))
         cur_orders = oc.get(bid, {}).get("orders", 0)
         cur_clicks = mc.get(bid, {}).get("clicks", 0)
         cur_conversions = mc.get(bid, {}).get("conversions", 0)
 
         cmp_spend = float(mp.get(bid, {}).get("spend", 0))
-        cmp_rev = float(op.get(bid, {}).get("revenue", 0))
+        if use_platform_rev:
+            cmp_rev = float(mp.get(bid, {}).get("conv_value", 0))
+        else:
+            cmp_rev = float(op.get(bid, {}).get("revenue", 0))
 
-        yoy_rev = float(oy.get(bid, {}).get("revenue", 0))
+        if use_platform_rev:
+            yoy_rev = float(my.get(bid, {}).get("conv_value", 0))
+        else:
+            yoy_rev = float(oy.get(bid, {}).get("revenue", 0))
 
         bgt = budgets.get(bid, {})
         rev_budget = float(bgt.get("revenue_budget", 0))
@@ -754,7 +768,7 @@ def brand_table(period, vertical_id=None, rev_type="net"):
             cur_spend=cur_spend, cmp_spend=cmp_spend,
             cmp_rev=cmp_rev,
             has_budget=bid in budgets,
-            has_revenue=bid in oc,
+            has_revenue=bid in mc if use_platform_rev else bid in oc,
         )
 
         rows.append({
@@ -934,10 +948,13 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week",
             .annotate(
                 s=Coalesce(Sum("cost"), _Z, output_field=_DF),
                 c=Coalesce(Sum("clicks"), 0),
+                cv=Coalesce(Sum("conversion_value"), _Z, output_field=_DF),
             )
             .order_by("date__date")
         )
         media_days = {r["date__date"]: r for r in media_qs}
+
+        use_platform_rev = rev_type == "platform"
 
         okw = {}
         if brand_id:
@@ -972,7 +989,10 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week",
                 m = media_days.get(d, {})
                 o = order_days.get(d, {})
                 buckets[key]["spend"] += float(m.get("s", 0))
-                buckets[key]["revenue"] += float(o.get("r", 0))
+                if use_platform_rev:
+                    buckets[key]["revenue"] += float(m.get("cv", 0))
+                else:
+                    buckets[key]["revenue"] += float(o.get("r", 0))
                 buckets[key]["orders"] += o.get("o", 0)
                 buckets[key]["clicks"] += m.get("c", 0)
             return buckets
@@ -989,7 +1009,11 @@ def daily_trend(period, vertical_id=None, rev_type="net", preset="this_week",
                 "date": d.isoformat(),
                 "day": _label(d),
                 "spend": float(media_days.get(d, {}).get("s", 0)),
-                "revenue": float(order_days.get(d, {}).get("r", 0)),
+                "revenue": (
+                    float(media_days.get(d, {}).get("cv", 0))
+                    if use_platform_rev
+                    else float(order_days.get(d, {}).get("r", 0))
+                ),
                 "orders": order_days.get(d, {}).get("o", 0),
                 "clicks": media_days.get(d, {}).get("c", 0),
             }
