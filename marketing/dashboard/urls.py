@@ -30,5 +30,6 @@ urlpatterns = [
     path("upload/", views.upload_csv, name="upload_csv"),
     path("revenue/upload/", views.upload_revenue, name="upload_revenue"),
     path("campaigns/match/", views.match_campaigns, name="match_campaigns"),
+    path("sites/upload/", views.upload_site_mapping, name="upload_site_mapping"),
     path("help/", views.help_page, name="help"),
 ]

@@ -12,8 +12,9 @@ from django.utils.text import slugify
 from . import services
 from django.db.models import Sum
 from .models import (
-    DimBrand, DimCampaign, DimCampaignType, DimDate, DimSource, DimVertical,
-    FactBudget, FactMediaDaily, FactOrdersDaily, FactVerticalBudget,
+    DimBrand, DimCampaign, DimCampaignType, DimDate, DimSite, DimSource,
+    DimVertical, FactBudget, FactMediaDaily, FactOrdersDaily,
+    FactVerticalBudget,
 )
 
 
@@ -1633,12 +1634,14 @@ def help_page(request):
 # Revenue Data Upload
 # ───────────────────────────────────────────────────────────────────────────
 
-REVENUE_REQUIRED_COLUMNS = ["vertical", "brand", "date", "orders", "net sales", "newsales"]
+REVENUE_REQUIRED_COLUMNS = ["site_id", "mfg id", "date", "orders", "net sales", "newsales"]
 
 
 def _parse_currency(raw):
     """Parse a currency string like '$1,234.56' or '($309)' into a Decimal."""
     s = raw.strip()
+    if s.lower() in ("(blank)", ""):
+        return Decimal("0")
     neg = s.startswith("(") and s.endswith(")")
     if neg:
         s = s[1:-1]
@@ -1674,11 +1677,14 @@ def upload_revenue(request):
     """Upload backend revenue/orders CSV — source of truth for brand-level performance."""
     error = None
     summary = None
+    no_site_mapping = DimSite.objects.count() == 0
 
     if request.method == "POST":
         csv_file = request.FILES.get("csv_file")
         if not csv_file:
             error = "No file selected."
+        elif no_site_mapping:
+            error = "Site ID mapping required. Upload a site-to-vertical mapping before uploading revenue data."
         else:
             raw = csv_file.read()
             try:
@@ -1704,26 +1710,50 @@ def upload_revenue(request):
                 else:
                     col_idx = {col: headers.index(col) for col in REVENUE_REQUIRED_COLUMNS}
 
-                    # ── First pass: collect all vertical names and validate ──
+                    # ── Build site lookup ──
+                    site_lookup = {
+                        s.site_id: s.vertical
+                        for s in DimSite.objects.select_related("vertical")
+                    }
+
+                    # ── First pass: parse and validate rows ──
                     rows_data = []
                     row_errors = []
-                    vertical_names = set()
+                    unknown_site_ids = set()
+                    unknown_mfg_ids = set()
                     for line_num, row in enumerate(reader, start=2):
                         if not any(cell.strip() for cell in row):
                             continue
 
-                        vert_name = row[col_idx["vertical"]].strip()
-                        brand_name = row[col_idx["brand"]].strip()
+                        site_id_raw = row[col_idx["site_id"]].strip()
+                        mfg_id_raw = row[col_idx["mfg id"]].strip()
                         date_raw = row[col_idx["date"]].strip()
                         orders_raw = row[col_idx["orders"]].strip()
                         net_raw = row[col_idx["net sales"]].strip()
                         new_raw = row[col_idx["newsales"]].strip()
 
-                        if not vert_name:
-                            row_errors.append(f"Row {line_num}: missing vertical.")
+                        if not site_id_raw:
+                            row_errors.append(f"Row {line_num}: missing site_id.")
                             continue
-                        if not brand_name:
-                            row_errors.append(f"Row {line_num}: missing brand.")
+
+                        try:
+                            site_id_val = int(site_id_raw)
+                        except (ValueError, TypeError):
+                            row_errors.append(f"Row {line_num}: invalid site_id '{site_id_raw}'.")
+                            continue
+
+                        if site_id_val not in site_lookup:
+                            unknown_site_ids.add(site_id_val)
+                            continue
+
+                        if not mfg_id_raw:
+                            row_errors.append(f"Row {line_num}: missing mfg id.")
+                            continue
+
+                        try:
+                            mfg_id_val = int(mfg_id_raw)
+                        except (ValueError, TypeError):
+                            row_errors.append(f"Row {line_num}: invalid mfg id '{mfg_id_raw}'.")
                             continue
 
                         date_val = _parse_revenue_date(date_raw)
@@ -1731,6 +1761,9 @@ def upload_revenue(request):
                             row_errors.append(f"Row {line_num}: invalid date '{date_raw}'.")
                             continue
 
+                        # Treat "(blank)" as 0 for numeric fields
+                        if orders_raw.lower() == "(blank)":
+                            orders_raw = "0"
                         try:
                             orders_val = int(orders_raw.replace(",", ""))
                         except (ValueError, TypeError):
@@ -1749,58 +1782,42 @@ def upload_revenue(request):
                             row_errors.append(f"Row {line_num}: invalid NewSales '{new_raw}'.")
                             continue
 
-                        vertical_names.add(vert_name)
                         rows_data.append({
                             "line": line_num,
-                            "vertical": vert_name,
-                            "brand": brand_name,
+                            "site_id": site_id_val,
+                            "mfg_id": mfg_id_val,
                             "date": date_val,
                             "orders": orders_val,
                             "net_revenue": net_val,
                             "new_revenue": new_val,
                         })
 
-                    # ── Check all verticals exist ──
-                    vert_lookup = {}
-                    for v in DimVertical.objects.all():
-                        vert_lookup[v.name.lower().strip()] = v
-
-                    unknown_verts = sorted({
-                        r["vertical"] for r in rows_data
-                        if r["vertical"].lower().strip() not in vert_lookup
-                    })
-                    if unknown_verts:
+                    # ── Fail if unknown site IDs ──
+                    if unknown_site_ids:
                         error = (
-                            f"Unknown verticals (create them first): "
-                            f"{', '.join(unknown_verts)}"
+                            f"Unknown site IDs (upload Site ID Mapping first): "
+                            f"{', '.join(str(s) for s in sorted(unknown_site_ids))}"
                         )
                     else:
-                        # ── Process rows ──
+                        # ── Pre-load brand lookup by (vertical_id, brand_id) ──
                         brand_cache = {}
+                        for b in DimBrand.objects.filter(brand_id__isnull=False).select_related("vertical"):
+                            if b.vertical_id:
+                                brand_cache[(b.vertical_id, b.brand_id)] = b
+
+                        # ── Process rows ──
                         created = 0
                         updated = 0
                         skipped = 0
-                        brands_created = []
 
                         for r in rows_data:
-                            vertical = vert_lookup[r["vertical"].lower().strip()]
-                            brand_key = (vertical.id, r["brand"].lower().strip())
+                            vertical = site_lookup[r["site_id"]]
+                            cache_key = (vertical.id, r["mfg_id"])
 
-                            if brand_key not in brand_cache:
-                                brand = DimBrand.objects.filter(
-                                    vertical=vertical,
-                                    name__iexact=r["brand"].strip(),
-                                ).first()
-                                if not brand:
-                                    brand = DimBrand.objects.create(
-                                        name=r["brand"].strip(),
-                                        slug=slugify(r["brand"].strip()),
-                                        vertical=vertical,
-                                    )
-                                    brands_created.append(f"{r['brand']} ({vertical.name})")
-                                brand_cache[brand_key] = brand
-
-                            brand = brand_cache[brand_key]
+                            brand = brand_cache.get(cache_key)
+                            if not brand:
+                                unknown_mfg_ids.add(r["mfg_id"])
+                                continue
 
                             dim_date = DimDate.objects.filter(date=r["date"]).first()
                             if not dim_date:
@@ -1824,16 +1841,146 @@ def upload_revenue(request):
                             else:
                                 updated += 1
 
+                        if unknown_mfg_ids:
+                            row_errors.insert(0,
+                                f"Unknown mfg IDs (no matching brand_id in vertical): "
+                                f"{', '.join(str(m) for m in sorted(unknown_mfg_ids))}"
+                            )
+
                         summary = {
                             "total": len(rows_data),
                             "created": created,
                             "updated": updated,
-                            "skipped": skipped,
-                            "brands_created": brands_created,
+                            "skipped": skipped + len([r for r in rows_data if (site_lookup[r["site_id"]].id, r["mfg_id"]) not in brand_cache]),
                             "errors": row_errors,
                         }
 
     return render(request, "dashboard/upload_revenue.html", {
         "error": error,
         "summary": summary,
+        "no_site_mapping": no_site_mapping,
+    })
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Site Mapping Upload
+# ───────────────────────────────────────────────────────────────────────────
+
+def upload_site_mapping(request):
+    """Upload CSV mapping site IDs to verticals."""
+    error = None
+    summary = None
+
+    if request.method == "POST":
+        action = request.POST.get("action", "upload")
+
+        if action == "rename":
+            renamed = 0
+            for site in DimSite.objects.filter(site_name=""):
+                new_name = request.POST.get(f"name_{site.id}", "").strip()
+                if new_name:
+                    site.site_name = new_name
+                    site.save(update_fields=["site_name"])
+                    renamed += 1
+            if renamed:
+                summary = {"renamed": renamed}
+
+        elif action == "upload":
+            pass  # fall through to CSV handling below
+
+        csv_file = request.FILES.get("csv_file") if action == "upload" else None
+        if action == "upload" and not csv_file:
+            error = "No file selected."
+        elif action == "upload" and csv_file:
+            raw = csv_file.read()
+            try:
+                text = raw.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                text = raw.decode("latin-1")
+
+            lines = text.splitlines()
+            if not lines:
+                error = "CSV file is empty."
+            else:
+                reader = csv.reader(io.StringIO(text))
+                raw_headers = next(reader)
+                headers = [h.strip().lower() for h in raw_headers]
+
+                required = ["site_id", "vertical"]
+                missing = [col for col in required if col not in headers]
+                if missing:
+                    error = f"Missing required columns: {', '.join(missing)}. Found: {', '.join(raw_headers)}"
+                else:
+                    idx_site = headers.index("site_id")
+                    idx_vert = headers.index("vertical")
+                    idx_name = headers.index("site_name") if "site_name" in headers else None
+
+                    # First pass: collect vertical names
+                    rows_data = []
+                    vertical_names = set()
+                    for line_num, row in enumerate(reader, start=2):
+                        if not any(cell.strip() for cell in row):
+                            continue
+                        site_id_raw = row[idx_site].strip()
+                        vert_name = row[idx_vert].strip()
+                        site_name = row[idx_name].strip() if idx_name is not None and idx_name < len(row) else ""
+
+                        if not site_id_raw or not vert_name:
+                            continue
+
+                        try:
+                            site_id_val = int(site_id_raw)
+                        except (ValueError, TypeError):
+                            continue
+
+                        vertical_names.add(vert_name)
+                        rows_data.append({
+                            "site_id": site_id_val,
+                            "vertical": vert_name,
+                            "site_name": site_name,
+                        })
+
+                    # Validate all verticals exist
+                    vert_lookup = {}
+                    for v in DimVertical.objects.all():
+                        vert_lookup[v.name.lower().strip()] = v
+
+                    unknown_verts = sorted({
+                        r["vertical"] for r in rows_data
+                        if r["vertical"].lower().strip() not in vert_lookup
+                    })
+                    if unknown_verts:
+                        error = (
+                            f"Unknown verticals (create them first): "
+                            f"{', '.join(unknown_verts)}"
+                        )
+                    else:
+                        created = 0
+                        updated = 0
+                        for r in rows_data:
+                            vertical = vert_lookup[r["vertical"].lower().strip()]
+                            _, is_new = DimSite.objects.update_or_create(
+                                site_id=r["site_id"],
+                                defaults={
+                                    "vertical": vertical,
+                                    "site_name": r["site_name"],
+                                },
+                            )
+                            if is_new:
+                                created += 1
+                            else:
+                                updated += 1
+
+                        summary = {
+                            "processed": len(rows_data),
+                            "created": created,
+                            "updated": updated,
+                        }
+
+    unmapped_sites = DimSite.objects.filter(site_name="").select_related("vertical")
+
+    return render(request, "dashboard/upload_site_mapping.html", {
+        "error": error,
+        "summary": summary,
+        "unmapped_sites": unmapped_sites,
     })

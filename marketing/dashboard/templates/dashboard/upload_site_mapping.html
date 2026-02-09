@@ -1,0 +1,138 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Upload Site ID Mapping{% endblock %}
+
+{% block content %}
+<h2 class="ui header">
+  <i class="map pin icon"></i>
+  <div class="content">Upload Site ID Mapping</div>
+</h2>
+
+<div class="ui two column stackable grid">
+
+  {# ── Left: Instructions ─────────────────────────────────────────── #}
+  <div class="six wide column">
+    <div class="ui blue segment">
+      <h4 class="ui header">Instructions</h4>
+      <div class="ui small list">
+        <div class="item">
+          <i class="green check icon"></i>
+          <div class="content"><strong>Required columns:</strong> site_id, vertical</div>
+        </div>
+        <div class="item">
+          <i class="grey hashtag icon"></i>
+          <div class="content"><strong>Optional column:</strong> site_name</div>
+        </div>
+        <div class="item">
+          <i class="orange sync icon"></i>
+          <div class="content"><strong>Upsert:</strong> Existing site IDs are updated; new ones are created.</div>
+        </div>
+        <div class="item">
+          <i class="red exclamation triangle icon"></i>
+          <div class="content"><strong>Verticals must exist:</strong> All verticals in the CSV must already be created. The upload will fail listing any unknown verticals.</div>
+        </div>
+        <div class="item">
+          <i class="blue info circle icon"></i>
+          <div class="content"><strong>Purpose:</strong> Maps numeric site IDs from backend revenue CSVs to the correct vertical for revenue uploads.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ui segment">
+      <h4 class="ui header">Expected Column Names</h4>
+      <div class="ui small list">
+        <div class="item"><i class="columns icon"></i> site_id</div>
+        <div class="item"><i class="columns icon"></i> vertical</div>
+        <div class="item"><i class="columns icon"></i> site_name <span style="color:#888">(optional)</span></div>
+      </div>
+      <p style="color:#888;font-size:0.85em;margin-top:0.5em"><i class="info circle icon"></i> Column matching is case-insensitive.</p>
+    </div>
+  </div>
+
+  {# ── Right: Form + Results ──────────────────────────────────────── #}
+  <div class="ten wide column">
+
+    {% if error %}
+    <div class="ui negative message">
+      <div class="header">Upload Error</div>
+      <p>{{ error }}</p>
+    </div>
+    {% endif %}
+
+    {% if summary.renamed %}
+    <div class="ui positive message">
+      <div class="header">Names Saved</div>
+      <p>Updated {{ summary.renamed }} site name{{ summary.renamed|pluralize }}.</p>
+    </div>
+    {% elif summary %}
+    <div class="ui positive message">
+      <div class="header">Import Complete</div>
+      <div class="ui small statistics" style="margin:1em 0">
+        <div class="statistic">
+          <div class="value">{{ summary.processed }}</div>
+          <div class="label">Processed</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.created }}</div>
+          <div class="label">Created</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.updated }}</div>
+          <div class="label">Updated</div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <form class="ui form segment" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="upload">
+
+      <div class="field">
+        <label>CSV File</label>
+        <input type="file" name="csv_file" accept=".csv" required>
+      </div>
+
+      <button class="ui primary button" type="submit">
+        <i class="upload icon"></i> Upload &amp; Import
+      </button>
+    </form>
+
+    {% if unmapped_sites %}
+    <h3 class="ui header" style="margin-top:2em">
+      <i class="tag icon"></i>
+      <div class="content">Unnamed Site IDs</div>
+    </h3>
+    <form class="ui form segment" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="rename">
+      <table class="ui very basic compact table">
+        <thead>
+          <tr>
+            <th>Site ID</th>
+            <th>Vertical</th>
+            <th>Site Name</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for site in unmapped_sites %}
+          <tr>
+            <td>{{ site.site_id }}</td>
+            <td>{{ site.vertical.name }}</td>
+            <td>
+              <div class="field" style="margin:0">
+                <input type="text" name="name_{{ site.id }}" placeholder="Enter name…" style="padding:0.4em 0.6em">
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <button class="ui teal button" type="submit">
+        <i class="save icon"></i> Save Names
+      </button>
+    </form>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

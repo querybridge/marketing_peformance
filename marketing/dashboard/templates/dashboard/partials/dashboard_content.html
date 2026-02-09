@@ -72,6 +72,12 @@
   .ui.table td.delta-warn { color: #e8880c !important; }
   .ui.table td.delta-bad  { color: #c41e1e !important; }
   .ui.table td.delta-flat { color: #6B7D94 !important; }
+  #brand-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f9fafb;
+  }
 </style>
 <div class="ui segment">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em">
@@ -81,6 +87,7 @@
       <i class="search icon"></i>
     </div>
   </div>
+  <div style="max-height:70vh;overflow-y:auto">
   <table class="ui compact celled striped table brand-table" id="brand-table">
     <thead>
       <tr>
@@ -146,6 +153,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>{# /scroll wrapper #}
 
   {% if page_obj.paginator.num_pages > 1 %}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-top:1em">

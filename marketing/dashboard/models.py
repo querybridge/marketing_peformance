@@ -43,6 +43,21 @@ class DimVertical(models.Model):
         return self.name
 
 
+class DimSite(models.Model):
+    """Maps backend site IDs to verticals for revenue ingest."""
+    site_id = models.IntegerField(unique=True)
+    vertical = models.ForeignKey(
+        DimVertical, on_delete=models.CASCADE, related_name="sites",
+    )
+    site_name = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        ordering = ["site_id"]
+
+    def __str__(self):
+        return f"Site {self.site_id} → {self.vertical.name}"
+
+
 class DimBrand(models.Model):
     """P&L-owning brand within a vertical."""
 

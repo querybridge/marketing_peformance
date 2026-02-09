@@ -16,7 +16,7 @@
       <div class="ui small list">
         <div class="item">
           <i class="green check icon"></i>
-          <div class="content"><strong>Required columns:</strong> vertical, brand, Date, Orders, Net Sales, NewSales</div>
+          <div class="content"><strong>Required columns:</strong> site_id, mfg id, Date, Orders, Net Sales, NewSales</div>
         </div>
         <div class="item">
           <i class="blue info circle icon"></i>
@@ -28,15 +28,15 @@
         </div>
         <div class="item">
           <i class="red exclamation triangle icon"></i>
-          <div class="content"><strong>Verticals must exist:</strong> All verticals in the CSV must already be created. The upload will fail listing any unknown verticals.</div>
+          <div class="content"><strong>Site IDs must be mapped:</strong> site_id must be mapped via <a href="{% url 'dashboard:upload_site_mapping' %}">Site ID Mapping</a> upload.</div>
         </div>
         <div class="item">
-          <i class="purple plus icon"></i>
-          <div class="content"><strong>Brand auto-create:</strong> Brands not found within a vertical are created automatically and assigned to that vertical.</div>
+          <i class="teal linkify icon"></i>
+          <div class="content"><strong>Brand matching:</strong> mfg id matches brands by Brand ID within the vertical mapped from site_id. Brands must exist before upload.</div>
         </div>
         <div class="item">
           <i class="grey hashtag icon"></i>
-          <div class="content"><strong>Matching:</strong> Vertical and brand are matched by name (case-insensitive, trimmed).</div>
+          <div class="content"><strong>Blanks:</strong> Orders, Net Sales, and NewSales values of "(blank)" are treated as 0.</div>
         </div>
       </div>
     </div>
@@ -44,8 +44,8 @@
     <div class="ui segment">
       <h4 class="ui header">Expected Column Names</h4>
       <div class="ui small list">
-        <div class="item"><i class="columns icon"></i> vertical</div>
-        <div class="item"><i class="columns icon"></i> brand</div>
+        <div class="item"><i class="columns icon"></i> site_id</div>
+        <div class="item"><i class="columns icon"></i> mfg id</div>
         <div class="item"><i class="columns icon"></i> Date</div>
         <div class="item"><i class="columns icon"></i> Orders</div>
         <div class="item"><i class="columns icon"></i> Net Sales</div>
@@ -57,6 +57,14 @@
 
   {# ── Right: Form + Results ──────────────────────────────────────── #}
   <div class="ten wide column">
+
+    {% if no_site_mapping %}
+    <div class="ui warning message">
+      <div class="header">Site ID Mapping Required</div>
+      <p>No site-to-vertical mappings have been configured.
+         <a href="{% url 'dashboard:upload_site_mapping' %}">Upload Site ID Mapping</a> before uploading revenue data.</p>
+    </div>
+    {% endif %}
 
     {% if error %}
     <div class="ui negative message">
@@ -88,9 +96,6 @@
         </div>
         {% endif %}
       </div>
-      {% if summary.brands_created %}
-      <p><i class="info circle icon"></i> Auto-created brands: {{ summary.brands_created|join:", " }}</p>
-      {% endif %}
     </div>
 
     {% if summary.errors %}

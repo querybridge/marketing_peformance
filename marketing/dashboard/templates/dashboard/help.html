@@ -158,6 +158,12 @@
   </div>
   <div class="item">
     <div class="content">
+      <div class="header">Upload Site ID Mapping</div>
+      Go to <a href="{% url 'dashboard:upload_site_mapping' %}">Site ID Mapping</a>. Upload a CSV mapping backend site IDs (numeric) to verticals. This is required before uploading revenue data.
+    </div>
+  </div>
+  <div class="item">
+    <div class="content">
       <div class="header">Upload Campaign Media Data</div>
       Go to <a href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>. Upload CSV exports from Google Ads, Bing Ads, Meta Ads, or Amazon Marketplace. The system auto-creates campaigns it hasn't seen before.
     </div>
@@ -373,6 +379,20 @@
     <div class="content">
       <a class="header" href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>
       <div class="description">Upload CSV exports from Google Ads, Bing Ads, Meta Ads, or Amazon Marketplace.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="dollar sign icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:upload_revenue' %}">Revenue Data</a>
+      <div class="description">Upload backend revenue/orders CSV. Uses numeric site_id (mapped via Site ID Mapping) to assign verticals.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="map pin icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:upload_site_mapping' %}">Site ID Mapping</a>
+      <div class="description">Map backend site IDs to verticals. Required before uploading revenue data.</div>
     </div>
   </div>
   <div class="item">

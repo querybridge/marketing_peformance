@@ -5,6 +5,7 @@ from .models import (
     DimCampaign,
     DimCampaignType,
     DimDate,
+    DimSite,
     DimSource,
     DimVertical,
     FactBudget,
@@ -24,6 +25,12 @@ class DimDateAdmin(admin.ModelAdmin):
 @admin.register(DimVertical)
 class DimVerticalAdmin(admin.ModelAdmin):
     list_display = ["name", "slug"]
+
+
+@admin.register(DimSite)
+class DimSiteAdmin(admin.ModelAdmin):
+    list_display = ["site_id", "vertical", "site_name"]
+    list_filter = ["vertical"]
 
 
 @admin.register(DimBrand)
