@@ -143,7 +143,7 @@
         <td class="right aligned">{{ row.conv_value|currency }}</td>
         <td class="right aligned">{% if row.roas != None %}{{ row.roas|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
         <td class="right aligned">{% if row.mts != None %}{{ row.mts|mts_fmt }}{% else %}&mdash;{% endif %}</td>
-        <td class="right aligned">{% if row.source_cvr != None %}{{ row.source_cvr|pct }}{% else %}&mdash;{% endif %}</td>
+        <td class="right aligned">{% if row.source_cvr != None %}{{ row.source_cvr|mts_fmt }}{% else %}&mdash;{% endif %}</td>
         <td class="center aligned">
           <span class="ui mini {{ row.scalability_score|score_color }} label">{{ row.scalability_score }}</span>
         </td>

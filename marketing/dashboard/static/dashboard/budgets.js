@@ -140,15 +140,3 @@ document.querySelectorAll(".vert-rev-input").forEach(function (input) {
     updateBrandState(input.dataset.month);
 });
 
-// ── Brand search filter ──
-
-var searchBox = document.getElementById("brand-search");
-if (searchBox) {
-    searchBox.addEventListener("input", function () {
-        var q = this.value.toLowerCase();
-        document.querySelectorAll(".brand-row").forEach(function (row) {
-            var name = row.getAttribute("data-brand-name") || "";
-            row.style.display = name.indexOf(q) !== -1 ? "" : "none";
-        });
-    });
-}
