@@ -14,6 +14,9 @@ A Django application for tracking paid marketing performance across verticals, b
 - **Revenue upload**: Order/revenue data (CSV) mapped to brands via site IDs
 - **Campaign matching**: Reassign auto-created campaigns to the correct brand after import (brand_id prefix auto-assignment)
 - **Budget management**: Monthly revenue and MTS targets at vertical level, auto-distributed to brands with manual override support
+- **Weekly optimization**: Campaign-level scalability scoring (0–100) with tROAS and seasonality adjustment recommendations, grouped by brand with revenue-at-risk alerts
+- **Scoring configuration**: Adjustable component weights, elasticity/efficiency windows, and minimum click thresholds
+- **Excel export**: Optimization results with styled headers via openpyxl
 - **PDF export**: Landscape report with brand table, exceptions panel, and trend charts
 - **HTMX drill-downs**: Click the caret icon on any brand row to expand source/type/campaign breakdowns without full page reload
 
@@ -30,7 +33,7 @@ Star schema with four fact tables at different grains:
 
 Dimension hierarchy: **Vertical > Brand > Source > Campaign Type > Campaign**
 
-Supporting dimensions: DimDate (calendar spine), DimVertical, DimBrand (with external brand_id), DimSource, DimCampaignType, DimCampaign (with UniqueConstraint on external_id + source), DimSite (site_id-to-vertical mapping for revenue ingest).
+Supporting dimensions: DimDate (calendar spine), DimVertical, DimBrand (with external brand_id), DimSource, DimCampaignType, DimCampaign (with UniqueConstraint on external_id + source), DimSite (site_id-to-vertical mapping for revenue ingest), ScoringConfig (singleton for optimization weights/windows).
 
 Revenue exists only at brand level. Below brand, revenue is allocated proportionally by spend share.
 
@@ -71,6 +74,9 @@ Visit `http://localhost:8000/` for the dashboard.
 | `/brands/` | Manage brands |
 | `/data-dictionary/` | Searchable metric definitions |
 | `/alert-spec/` | Alert rule documentation (Python + SQL) |
+| `/optimization/` | Weekly optimization — scalability scores and tROAS recommendations |
+| `/optimization/export/` | Download optimization results as Excel |
+| `/scoring/` | Scoring configuration — component weights and window sizes |
 | `/help/` | User guide and help documentation |
 
 ## CSV Import
@@ -106,13 +112,33 @@ Partial presets (This Week/Month/Quarter) trim the comparison window to the same
 | Missing Budget | No budget entered for period |
 | Missing Revenue | No order/revenue data uploaded |
 
+## Weekly Optimization
+
+The optimization engine scores each active campaign on **scalability** (0–100) using three weighted components:
+
+| Component | What It Measures | Default Weight |
+|-----------|-----------------|----------------|
+| A — Elasticity | Spend→click responsiveness (log-log regression) | 40% |
+| B — Budget Binding | Room to grow vs implied budget from LY spend share | 30% |
+| C — Efficiency Stability | Weekly ROAS/CVR consistency, shrunk toward peer group | 30% |
+
+**Recommendations** (only actionable campaigns shown — holds are excluded):
+
+| Action | Trigger | Cap |
+|--------|---------|-----|
+| Decrease tROAS | Score ≥ 70 (scale opportunity) | ±15%/week |
+| Increase tROAS | Score < 40 (efficiency concern) | ±15%/week |
+| Seasonality Adjustment | Score ≥ 60, revenue pacing < 90%, MTS pacing ≤ 110% | +15% |
+
+Campaigns are grouped by brand with revenue-at-risk badges showing projected MTS. Period presets: Last Week, Last 7 Days, Month-to-Date.
+
 ## Testing
 
 ```bash
 python manage.py test dashboard
 ```
 
-185 tests covering date engine logic, alert classification, PDF generation, and CSV import.
+247 tests covering date engine logic, alert classification, PDF generation, CSV import, and optimization scoring.
 
 ## Deployment
 
@@ -125,6 +151,7 @@ CI/CD via GitLab (`.gitlab-ci.yml`):
 - Django 5.0+
 - SQLite
 - ReportLab (PDF generation)
+- openpyxl (Excel export)
 - HTMX (drill-down interactions)
 - Google Charts (trend visualizations)
 - Semantic UI (CSS framework)
