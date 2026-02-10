@@ -437,15 +437,18 @@ def check_vertical_alert(
     ):
         rev_gap = revenue_goal - projected_revenue
         mts_over = (projected_mts - mts_goal) * 10000  # bps
+        projected_mts_pct = projected_mts * 100
         return {
             "message": (
                 f"Revenue at risk: projected ${projected_revenue:,.0f} vs "
                 f"${revenue_goal:,.0f} goal (gap: ${rev_gap:,.0f}). "
-                f"MTS projected {mts_over:+.0f} bps above target."
+                f"Projected MTS: {projected_mts_pct:.1f}% "
+                f"({mts_over:+.0f} bps vs target)."
             ),
             "projected_revenue": projected_revenue,
             "revenue_goal": revenue_goal,
             "projected_mts": projected_mts,
+            "projected_mts_pct": projected_mts_pct,
             "mts_goal": mts_goal,
         }
 
@@ -785,18 +788,25 @@ def check_brand_revenue_at_risk(
 
     projection_factor = days_in_month / elapsed
     projected_revenue = total_revenue * projection_factor
+    projected_spend = total_spend * projection_factor
     revenue_goal = float(bb.revenue_budget)
+    projected_mts = projected_spend / projected_revenue if projected_revenue > 0 else None
+    projected_mts_pct = projected_mts * 100 if projected_mts is not None else None
 
     if projected_revenue < revenue_goal:
         gap = revenue_goal - projected_revenue
         pct_behind = gap / revenue_goal
+        mts_str = f" | Projected MTS: {projected_mts_pct:.1f}%" if projected_mts_pct is not None else ""
         return {
             "message": (
                 f"Projected ${projected_revenue:,.0f} vs "
                 f"${revenue_goal:,.0f} goal (${gap:,.0f} gap)"
+                f"{mts_str}"
             ),
             "projected_revenue": projected_revenue,
             "revenue_goal": revenue_goal,
+            "projected_mts": projected_mts,
+            "projected_mts_pct": projected_mts_pct,
             "pct_behind": pct_behind,
         }
     return None

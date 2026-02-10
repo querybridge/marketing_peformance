@@ -474,6 +474,9 @@ class VerticalAlertTests(TestCase):
         alert = check_vertical_alert(self.vertical.id, window)
         self.assertIsNotNone(alert)
         self.assertIn("Revenue at risk", alert["message"])
+        self.assertIn("Projected MTS:", alert["message"])
+        self.assertIsNotNone(alert["projected_mts_pct"])
+        self.assertGreater(alert["projected_mts_pct"], 0)
 
     def test_no_alert_on_track(self):
         """No alert when revenue is on track."""
@@ -778,3 +781,79 @@ class MTSColumnTests(SimpleTestCase):
         from dashboard.templatetags.dashboard_filters import mts_fmt
         self.assertEqual(mts_fmt(0.25), "25.0%")
         self.assertEqual(mts_fmt(0.1234), "12.3%")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# o) BrandRevenueAtRiskMTSTests
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class BrandRevenueAtRiskMTSTests(TestCase):
+    """Test that brand-level revenue-at-risk includes projected MTS."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.vertical = DimVertical.objects.create(name="MTS Vert", slug="mts-vert")
+        cls.brand = DimBrand.objects.create(
+            name="MTS Brand", slug="mts-brand", vertical=cls.vertical,
+        )
+        cls.source = DimSource.objects.create(name="Test Src", slug="test-src")
+        cls.ctype = DimCampaignType.objects.create(name="Test Type", slug="test-type")
+        cls.campaign = DimCampaign.objects.create(
+            name="MTS Campaign", brand=cls.brand,
+            source=cls.source, campaign_type=cls.ctype,
+        )
+
+        cls.dates = {}
+        d = date(2026, 2, 1)
+        while d <= date(2026, 2, 28):
+            dd = DimDate.objects.create(
+                date=d, year=d.year,
+                quarter=(d.month - 1) // 3 + 1, month=d.month,
+                week=d.isocalendar()[1], day_of_week=d.weekday(),
+                day_of_month=d.day, day_of_year=d.timetuple().tm_yday,
+                is_weekend=d.weekday() >= 5,
+                year_month=f"{d.year}-{d.month:02d}",
+                year_week=f"{d.year}-W{d.isocalendar()[1]:02d}",
+                week_start=d - timedelta(days=d.weekday()),
+                month_start=d.replace(day=1),
+            )
+            cls.dates[d] = dd
+            d += timedelta(days=1)
+
+        # Brand budget: high revenue goal so brand is behind
+        cls.month_date = cls.dates[date(2026, 2, 1)]
+        FactBudget.objects.create(
+            brand=cls.brand, month=cls.month_date,
+            revenue_budget=Decimal("500000"),
+            mts_budget=Decimal("0.2500"),
+        )
+
+        # Add media + order data: spend $300/day, revenue $500/day → MTS = 60%
+        for day_num in range(1, 8):
+            d = date(2026, 2, day_num)
+            FactMediaDaily.objects.create(
+                campaign=cls.campaign, date=cls.dates[d],
+                cost=Decimal("300"), clicks=30,
+                conversions=2, conversion_value=Decimal("100"),
+            )
+            FactOrdersDaily.objects.create(
+                brand=cls.brand, date=cls.dates[d],
+                orders=3, net_revenue=Decimal("500"),
+                new_revenue=Decimal("600"),
+            )
+
+    def test_brand_risk_includes_projected_mts(self):
+        window = DateWindow(date(2026, 2, 1), date(2026, 2, 7))
+        risk = check_brand_revenue_at_risk(self.brand.id, self.vertical.id, window)
+        self.assertIsNotNone(risk)
+        self.assertIn("projected_mts_pct", risk)
+        self.assertIsNotNone(risk["projected_mts_pct"])
+        # spend=$300*28=8400, rev=$500*28=14000, MTS=60%
+        self.assertAlmostEqual(risk["projected_mts_pct"], 60.0, places=0)
+
+    def test_brand_risk_message_contains_mts(self):
+        window = DateWindow(date(2026, 2, 1), date(2026, 2, 7))
+        risk = check_brand_revenue_at_risk(self.brand.id, self.vertical.id, window)
+        self.assertIsNotNone(risk)
+        self.assertIn("Projected MTS:", risk["message"])

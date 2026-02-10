@@ -106,7 +106,7 @@
     <span class="ui mini label">{{ group.total_spend|currency }} spend</span>
     {% if group.revenue_at_risk %}
     <span class="ui mini red label" title="{{ group.revenue_at_risk.message }}">
-      <i class="exclamation triangle icon"></i> Revenue at Risk
+      <i class="exclamation triangle icon"></i> Revenue at Risk{% if group.revenue_at_risk.projected_mts_pct %} &middot; MTS {{ group.revenue_at_risk.projected_mts_pct|floatformat:1 }}%{% endif %}
     </span>
     {% endif %}
   </div>
