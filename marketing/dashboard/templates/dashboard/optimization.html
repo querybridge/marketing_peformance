@@ -1,0 +1,205 @@
+{% extends "dashboard/base.html" %}
+{% load dashboard_filters %}
+
+{% block title %}Weekly Optimization{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">
+  Weekly Optimization
+  <div class="sub header">Campaign-level scalability scoring &amp; tROAS recommendations</div>
+</h2>
+
+<!-- ── Filter Bar ────────────────────────────────────────────── -->
+<form method="get" action="{% url 'dashboard:optimization' %}">
+  <div class="ui form">
+    <div class="equal width fields">
+
+      <div class="field">
+        <label>Vertical</label>
+        <select name="vertical" class="ui dropdown" required>
+          <option value="">Select Vertical...</option>
+          {% for v in verticals %}
+          <option value="{{ v.id }}" {% if selected_vertical_id == v.id %}selected{% endif %}>{{ v.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Source</label>
+        <select name="source" class="ui dropdown">
+          <option value="">All Sources</option>
+          {% for s in sources %}
+          <option value="{{ s.id }}" {% if selected_source_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Period</label>
+        <select name="preset" class="ui dropdown">
+          {% for val, label in presets %}
+          <option value="{{ val }}" {% if val == selected_preset %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Elasticity Window</label>
+        <input type="number" name="elast" value="{{ elasticity_days }}" min="7" placeholder="14">
+      </div>
+
+      <div class="field">
+        <label>Efficiency Window</label>
+        <input type="number" name="eff" value="{{ efficiency_days }}" min="14" placeholder="28">
+      </div>
+
+      <div class="field" style="display:flex;align-items:flex-end">
+        <button class="ui primary button" type="submit">Apply</button>
+      </div>
+
+    </div>
+  </div>
+</form>
+
+{% if not selected_vertical %}
+<div class="ui info message">
+  <div class="header">Select a Vertical</div>
+  <p>Choose a vertical from the dropdown above to view campaign optimization scores.</p>
+</div>
+
+{% else %}
+
+<!-- ── Vertical Alert Banner ─────────────────────────────────── -->
+{% if alert_banner %}
+<div class="ui negative message revenue-risk-banner" style="margin-top:1em">
+  <i class="exclamation triangle icon"></i>
+  {{ alert_banner.message }}
+</div>
+{% endif %}
+
+<!-- ── Period Badge + Export ──────────────────────────────────── -->
+{% if period %}
+<div style="margin:1em 0;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+  <span class="ui label">
+    Analysis: {{ period.analysis.start }} &ndash; {{ period.analysis.end }}
+    ({{ period.analysis.days }} day{{ period.analysis.days|pluralize }})
+  </span>
+  <span class="ui grey label">{{ total_campaigns }} campaign{{ total_campaigns|pluralize }}</span>
+  <a class="ui small primary button"
+     href="{% url 'dashboard:optimization_export' %}?{{ filter_qs }}">
+    <i class="download icon"></i> Download Excel
+  </a>
+</div>
+{% endif %}
+
+<!-- ── Grouped Results ───────────────────────────────────────── -->
+{% if brand_groups %}
+
+{% for group in brand_groups %}
+<div class="opt-brand-group" style="margin-bottom:2em">
+
+  <!-- Brand header row -->
+  <div class="opt-brand-header" style="display:flex;align-items:center;gap:0.75em;flex-wrap:wrap;padding:0.6em 0.8em;background:#DAEDFF;border:1px solid #C4D9F2;border-bottom:none;border-radius:4px 4px 0 0">
+    <strong style="font-size:1.1em">{{ group.brand_name }}</strong>
+    <span class="ui mini grey label">{{ group.campaign_count }} campaign{{ group.campaign_count|pluralize }}</span>
+    <span class="ui mini label">{{ group.total_spend|currency }} spend</span>
+    {% if group.revenue_at_risk %}
+    <span class="ui mini red label" title="{{ group.revenue_at_risk.message }}">
+      <i class="exclamation triangle icon"></i> Revenue at Risk
+    </span>
+    {% endif %}
+  </div>
+
+  <!-- Campaign table for this brand -->
+  <div style="overflow-x:auto">
+  <table class="ui compact celled striped table" style="border-radius:0 0 4px 4px;margin-top:0">
+    <thead>
+      <tr>
+        <th>Campaign</th>
+        <th>Source</th>
+        <th>Type</th>
+        <th class="right aligned">Spend</th>
+        <th class="right aligned">Clicks</th>
+        <th class="right aligned">Conv</th>
+        <th class="right aligned">Conv Value</th>
+        <th class="right aligned">ROAS</th>
+        <th class="right aligned">MTS</th>
+        <th class="right aligned">Src CVR</th>
+        <th class="center aligned">Score</th>
+        <th>Action</th>
+        <th>Reasons</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in group.campaigns %}
+      <tr>
+        <td>{{ row.campaign_name }}</td>
+        <td>{{ row.source_name }}</td>
+        <td>{{ row.campaign_type_name }}</td>
+        <td class="right aligned">{{ row.spend|currency }}</td>
+        <td class="right aligned">{{ row.clicks|intcomma }}</td>
+        <td class="right aligned">{{ row.conversions|intcomma }}</td>
+        <td class="right aligned">{{ row.conv_value|currency }}</td>
+        <td class="right aligned">{% if row.roas != None %}{{ row.roas|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+        <td class="right aligned">{% if row.mts != None %}{{ row.mts|mts_fmt }}{% else %}&mdash;{% endif %}</td>
+        <td class="right aligned">{% if row.source_cvr != None %}{{ row.source_cvr|pct }}{% else %}&mdash;{% endif %}</td>
+        <td class="center aligned">
+          <span class="ui mini {{ row.scalability_score|score_color }} label">{{ row.scalability_score }}</span>
+        </td>
+        <td>
+          {{ row.detail }}
+          {% if row.action == "seasonality_adjustment" %}<em>(Temporary)</em>{% endif %}
+        </td>
+        <td>
+          {% for code in row.reason_codes %}
+          <span class="ui mini {{ code|reason_badge_color }} label opt-reason-badge">{{ code|reason_label }}</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+</div>
+{% endfor %}
+
+<!-- ── Pagination ─────────────────────────────────────────────── -->
+{% if page_obj.paginator.num_pages > 1 %}
+<div style="display:flex;align-items:center;justify-content:space-between;margin-top:1em">
+  <span class="ui small text" style="color:#6B7D94">
+    Showing {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }} of {{ page_obj.paginator.count }} campaigns
+  </span>
+  <div class="ui small pagination menu">
+    {% if page_obj.has_previous %}
+    <a class="item" href="?{{ filter_qs_no_page }}&page={{ page_obj.previous_page_number }}">
+      <i class="left chevron icon"></i>
+    </a>
+    {% endif %}
+    {% for num in page_obj.paginator.page_range %}
+      {% if num == page_obj.number %}
+      <a class="active item">{{ num }}</a>
+      {% else %}
+      <a class="item" href="?{{ filter_qs_no_page }}&page={{ num }}">{{ num }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if page_obj.has_next %}
+    <a class="item" href="?{{ filter_qs_no_page }}&page={{ page_obj.next_page_number }}">
+      <i class="right chevron icon"></i>
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="ui message">
+  <p>No actionable campaigns found for <strong>{{ selected_vertical.name }}</strong> in this period.
+  Campaigns must have expected conversions &ge; 1 and a recommended action to be included.</p>
+</div>
+{% endif %}
+
+{% endif %}{# end selected_vertical #}
+
+{% endblock %}

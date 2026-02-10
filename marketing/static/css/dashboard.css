@@ -117,3 +117,22 @@ th.sortable-col .sort-icon { font-size: 0.8em; }
   background: #DAEDFF !important;
   border-bottom: 2px solid #256FAD !important;
 }
+
+/* ── Optimization score colors ─────────────────────────────── */
+.score-high { color: #1a8a38; font-weight: 700; }
+.score-mid  { color: #d4800e; font-weight: 700; }
+.score-low  { color: #c41e1e; font-weight: 700; }
+
+/* ── Revenue at risk banner ────────────────────────────────── */
+.revenue-risk-banner {
+  background: #fde8e8 !important;
+  border: 1px solid #c41e1e !important;
+  color: #c41e1e !important;
+}
+
+/* ── Optimization reason badges ────────────────────────────── */
+.opt-reason-badge { margin: 1px 2px !important; }
+
+/* ── Brand group headers ───────────────────────────────────── */
+.opt-brand-header { font-size: 0.95em; }
+.opt-brand-group .ui.table { margin-top: 0 !important; }

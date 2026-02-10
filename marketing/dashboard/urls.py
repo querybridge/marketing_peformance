@@ -32,4 +32,7 @@ urlpatterns = [
     path("campaigns/match/", views.match_campaigns, name="match_campaigns"),
     path("sites/upload/", views.upload_site_mapping, name="upload_site_mapping"),
     path("help/", views.help_page, name="help"),
+    path("optimization/", views.weekly_optimization, name="optimization"),
+    path("optimization/export/", views.export_optimization_xlsx, name="optimization_export"),
+    path("scoring/", views.scoring_config, name="scoring_config"),
 ]

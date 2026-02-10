@@ -1,0 +1,142 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Scoring Configuration{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">
+  Scoring Configuration
+  <div class="sub header">Adjust the weights and windows used by the optimization scoring engine</div>
+</h2>
+
+{% if saved %}
+<div class="ui success message">
+  <i class="check circle icon"></i>
+  Configuration saved successfully.
+</div>
+{% endif %}
+
+{% if error %}
+<div class="ui negative message">
+  <i class="exclamation triangle icon"></i>
+  {{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'dashboard:scoring_config' %}" class="ui form">
+  {% csrf_token %}
+
+  <h3 class="ui dividing header">Lookback Windows</h3>
+  <div class="two fields">
+    <div class="field">
+      <label>Elasticity Window (days, min 7)</label>
+      <input type="number" name="elasticity_window" value="{{ config.elasticity_window }}" min="7" required>
+    </div>
+    <div class="field">
+      <label>Efficiency Window (days, min 14)</label>
+      <input type="number" name="efficiency_window" value="{{ config.efficiency_window }}" min="14" required>
+    </div>
+  </div>
+
+  <h3 class="ui dividing header">Component Weights <span id="weight-sum" class="ui small label" style="margin-left:0.5em">{{ config.weight_a|add:config.weight_b|add:config.weight_c }}</span></h3>
+  <div class="three fields">
+    <div class="field">
+      <label>A &mdash; Elasticity</label>
+      <input type="number" name="weight_a" value="{{ config.weight_a }}" min="0" max="100" class="weight-input" required>
+    </div>
+    <div class="field">
+      <label>B &mdash; Budget Binding</label>
+      <input type="number" name="weight_b" value="{{ config.weight_b }}" min="0" max="100" class="weight-input" required>
+    </div>
+    <div class="field">
+      <label>C &mdash; Efficiency Stability</label>
+      <input type="number" name="weight_c" value="{{ config.weight_c }}" min="0" max="100" class="weight-input" required>
+    </div>
+  </div>
+
+  <h3 class="ui dividing header">Thresholds</h3>
+  <div class="field" style="max-width:300px">
+    <label>Min Click Threshold</label>
+    <input type="number" name="min_click_threshold" value="{{ config.min_click_threshold }}" min="1" required>
+    <small style="color:#6B7D94">Campaigns below this click count use peer CVR instead of own CVR.</small>
+  </div>
+
+  <button class="ui primary button" type="submit" style="margin-top:1em">Save Configuration</button>
+</form>
+
+<div class="ui divider" style="margin-top:2em"></div>
+
+<h3 class="ui header">Component Definitions</h3>
+<div class="ui three stackable cards">
+  <div class="card">
+    <div class="content">
+      <div class="header">A &mdash; Spend&rarr;Click Elasticity</div>
+      <div class="description">
+        Log-log regression of daily spend vs clicks over the elasticity window.
+        Higher elasticity means more clicks per incremental dollar &mdash; better scalability.
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="content">
+      <div class="header">B &mdash; Budget Binding Proxy</div>
+      <div class="description">
+        Compares current spend to an implied campaign budget derived from last year's spend share
+        and the vertical's monthly budget. Lower utilization = more room to grow = higher score.
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="content">
+      <div class="header">C &mdash; Efficiency Stability</div>
+      <div class="description">
+        Weekly ROAS and CVR coefficient of variation, shrunk toward the peer group.
+        Lower CV means more predictable performance &mdash; safer to scale.
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3 class="ui header" style="margin-top:2em">Recommendation Types</h3>
+<table class="ui celled table" style="max-width:700px">
+  <thead><tr><th>Action</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>tROAS Adjustment</strong></td>
+      <td>
+        Primary lever. Score &ge; 70: decrease tROAS (bid more aggressively).
+        Score &lt; 40: increase tROAS (pull back). Capped at &plusmn;15%/week.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>Seasonality Adjustment</strong></td>
+      <td>
+        Temporary bid boost when: score &ge; 60, revenue pacing &lt; 90% of goal,
+        and MTS pacing &le; 110% of goal. Used for short-term pacing catch-up.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var inputs = document.querySelectorAll('.weight-input');
+  var sumLabel = document.getElementById('weight-sum');
+  function updateSum() {
+    var total = 0;
+    inputs.forEach(function(inp) { total += parseInt(inp.value) || 0; });
+    sumLabel.textContent = total;
+    if (total === 100) {
+      sumLabel.className = 'ui small green label';
+    } else {
+      sumLabel.className = 'ui small red label';
+    }
+  }
+  inputs.forEach(function(inp) { inp.addEventListener('input', updateSum); });
+  updateSum();
+})();
+</script>
+{% endblock %}

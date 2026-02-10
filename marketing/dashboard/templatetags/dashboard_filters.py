@@ -154,3 +154,61 @@ def alert_color(key):
 def alert_tooltip(key):
     """Alert key → one-sentence tooltip."""
     return ALERT_META.get(key, {}).get("tooltip", "")
+
+
+@register.filter
+def score_color(value):
+    """Scalability score → Semantic UI color class."""
+    try:
+        v = int(value)
+        if v >= 70:
+            return "green"
+        if v >= 40:
+            return "yellow"
+        return "red"
+    except (ValueError, TypeError):
+        return "grey"
+
+
+# Maps reason codes → good (green) / bad (red) / neutral (grey).
+_REASON_SENTIMENT = {
+    "high_elasticity":       "good",
+    "low_elasticity":        "bad",
+    "budget_headroom":       "good",
+    "budget_constrained":    "bad",
+    "stable_efficiency":     "good",
+    "volatile_efficiency":   "bad",
+    "revenue_pacing_behind": "bad",
+    "scale_opportunity":     "good",
+    "efficiency_concern":    "bad",
+}
+
+# Human-readable labels for reason codes.
+_REASON_LABELS = {
+    "high_elasticity":       "High Elasticity",
+    "low_elasticity":        "Low Elasticity",
+    "budget_headroom":       "Budget Headroom",
+    "budget_constrained":    "Budget Constrained",
+    "stable_efficiency":     "Stable Efficiency",
+    "volatile_efficiency":   "Volatile Efficiency",
+    "revenue_pacing_behind": "Rev Pacing Behind",
+    "scale_opportunity":     "Scale Opportunity",
+    "efficiency_concern":    "Efficiency Concern",
+}
+
+
+@register.filter
+def reason_badge_color(code):
+    """Reason code → Semantic UI color for traffic-light badges."""
+    sentiment = _REASON_SENTIMENT.get(code, "neutral")
+    if sentiment == "good":
+        return "green"
+    if sentiment == "bad":
+        return "red"
+    return "grey"
+
+
+@register.filter
+def reason_label(code):
+    """Reason code → human-readable label."""
+    return _REASON_LABELS.get(code, code.replace("_", " ").title())

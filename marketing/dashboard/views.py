@@ -14,7 +14,7 @@ from django.db.models import Sum
 from .models import (
     DimBrand, DimCampaign, DimCampaignType, DimDate, DimSite, DimSource,
     DimVertical, FactBudget, FactMediaDaily, FactOrdersDaily,
-    FactVerticalBudget,
+    FactVerticalBudget, ScoringConfig,
 )
 
 
@@ -1929,7 +1929,7 @@ def upload_revenue(request):
 # Site Mapping Upload
 # ───────────────────────────────────────────────────────────────────────────
 
-def upload_site_mapping(request):
+def upload_site_mapping(request):                              # noqa: C901
     """Upload CSV mapping site IDs to verticals."""
     error = None
     summary = None
@@ -2046,4 +2046,216 @@ def upload_site_mapping(request):
         "error": error,
         "summary": summary,
         "unmapped_sites": unmapped_sites,
+    })
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Weekly Optimization
+# ───────────────────────────────────────────────────────────────────────────
+
+def weekly_optimization(request):
+    from . import optimization_services as opt
+
+    g = request.GET
+    vertical_id = int(g["vertical"]) if g.get("vertical") else None
+    source_id = int(g["source"]) if g.get("source") else None
+    preset = g.get("preset", "last_week")
+    elast = int(g["elast"]) if g.get("elast") else None
+    eff = int(g["eff"]) if g.get("eff") else None
+
+    config = ScoringConfig.load()
+    elasticity_days = elast if elast and elast >= 7 else config.elasticity_window
+    efficiency_days = eff if eff and eff >= 14 else config.efficiency_window
+
+    selected_vertical = None
+    brand_groups = []
+    all_rows = []
+    alert_banner = None
+    period = None
+
+    if vertical_id:
+        selected_vertical = DimVertical.objects.filter(id=vertical_id).first()
+        period = opt.resolve_optimization_period(
+            preset=preset,
+            elasticity_days=elasticity_days,
+            efficiency_days=efficiency_days,
+        )
+        all_rows = opt.build_optimization_table(
+            vertical_id, period, config, source_id=source_id,
+        )
+        brand_groups = opt.group_by_brand(
+            all_rows, vertical_id, period.analysis,
+        )
+        alert_banner = opt.check_vertical_alert(vertical_id, period.analysis)
+
+    # Build filter query string for export link
+    filter_qs = request.GET.urlencode()
+    filter_qs_no_page = "&".join(
+        f"{k}={v}" for k, v in request.GET.items() if k != "page"
+    )
+
+    # Paginate on the flat campaign list (for count display)
+    paginator = Paginator(all_rows, 25)
+    page_number = request.GET.get("page", 1)
+    page_obj = paginator.get_page(page_number)
+
+    # For paginated display, rebuild brand groups from the current page only
+    page_brand_groups = []
+    if page_obj.object_list:
+        page_brand_groups = opt.group_by_brand(
+            list(page_obj.object_list), vertical_id,
+            # Don't re-query revenue-at-risk for page subsets —
+            # carry forward from the full brand_groups
+            analysis_window=None,
+        )
+        # Merge revenue_at_risk from the full groups
+        full_risk = {g.brand_id: g.revenue_at_risk for g in brand_groups}
+        for pg in page_brand_groups:
+            pg.revenue_at_risk = full_risk.get(pg.brand_id)
+
+    ctx = {
+        "verticals": DimVertical.objects.all(),
+        "sources": DimSource.objects.all(),
+        "presets": opt.OPT_PRESET_CHOICES,
+        "selected_vertical": selected_vertical,
+        "selected_vertical_id": vertical_id,
+        "selected_source_id": source_id,
+        "selected_preset": preset,
+        "elasticity_days": elasticity_days,
+        "efficiency_days": efficiency_days,
+        "brand_groups": page_brand_groups,
+        "total_campaigns": len(all_rows),
+        "page_obj": page_obj,
+        "alert_banner": alert_banner,
+        "period": period,
+        "filter_qs": filter_qs,
+        "filter_qs_no_page": filter_qs_no_page,
+    }
+    return render(request, "dashboard/optimization.html", ctx)
+
+
+def export_optimization_xlsx(request):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from . import optimization_services as opt
+
+    g = request.GET
+    vertical_id = int(g["vertical"]) if g.get("vertical") else None
+    if not vertical_id:
+        return HttpResponse("vertical parameter is required", status=400)
+
+    source_id = int(g["source"]) if g.get("source") else None
+    preset = g.get("preset", "last_week")
+    elast = int(g["elast"]) if g.get("elast") else None
+    eff = int(g["eff"]) if g.get("eff") else None
+
+    config = ScoringConfig.load()
+    elasticity_days = elast if elast and elast >= 7 else config.elasticity_window
+    efficiency_days = eff if eff and eff >= 14 else config.efficiency_window
+
+    period = opt.resolve_optimization_period(
+        preset=preset,
+        elasticity_days=elasticity_days,
+        efficiency_days=efficiency_days,
+    )
+    rows = opt.build_optimization_table(
+        vertical_id, period, config, source_id=source_id,
+    )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Optimization"
+
+    headers = [
+        "Campaign", "Source", "Campaign Type", "Brand",
+        "Spend", "Clicks", "Conversions", "Conv Value", "ROAS", "MTS",
+        "Source CVR", "Scalability Score",
+        "Comp A (Elasticity)", "Comp B (Budget)", "Comp C (Stability)",
+        "Expected Conversions", "CVR Baseline", "Used Peer CVR",
+        "Action", "Magnitude", "Reason Codes",
+    ]
+
+    header_fill = PatternFill(start_color="313E4F", end_color="313E4F", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True)
+
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row_idx, r in enumerate(rows, 2):
+        ws.cell(row=row_idx, column=1, value=r.campaign_name)
+        ws.cell(row=row_idx, column=2, value=r.source_name)
+        ws.cell(row=row_idx, column=3, value=r.campaign_type_name)
+        ws.cell(row=row_idx, column=4, value=r.brand_name)
+        ws.cell(row=row_idx, column=5, value=round(r.spend, 2))
+        ws.cell(row=row_idx, column=6, value=r.clicks)
+        ws.cell(row=row_idx, column=7, value=r.conversions)
+        ws.cell(row=row_idx, column=8, value=round(r.conv_value, 2))
+        ws.cell(row=row_idx, column=9, value=round(r.roas, 4) if r.roas else None)
+        ws.cell(row=row_idx, column=10, value=round(r.mts, 4) if r.mts else None)
+        ws.cell(row=row_idx, column=11, value=round(r.source_cvr, 4) if r.source_cvr else None)
+        ws.cell(row=row_idx, column=12, value=r.scalability_score)
+        ws.cell(row=row_idx, column=13, value=r.comp_a)
+        ws.cell(row=row_idx, column=14, value=r.comp_b)
+        ws.cell(row=row_idx, column=15, value=r.comp_c)
+        ws.cell(row=row_idx, column=16, value=r.expected_conversions)
+        ws.cell(row=row_idx, column=17, value=r.cvr_baseline)
+        ws.cell(row=row_idx, column=18, value="Yes" if r.used_peer_cvr else "No")
+        ws.cell(row=row_idx, column=19, value=r.detail)
+        ws.cell(row=row_idx, column=20, value=r.magnitude)
+        ws.cell(row=row_idx, column=21, value="; ".join(r.reason_codes))
+
+    vertical = DimVertical.objects.filter(id=vertical_id).first()
+    slug = vertical.slug if vertical else "unknown"
+    filename = f"optimization-{slug}-{period.analysis.end}.xlsx"
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
+
+
+def scoring_config(request):
+    config = ScoringConfig.load()
+    error = None
+    saved = False
+
+    if request.method == "POST":
+        try:
+            w_a = int(request.POST.get("weight_a", 40))
+            w_b = int(request.POST.get("weight_b", 30))
+            w_c = int(request.POST.get("weight_c", 30))
+            elast = int(request.POST.get("elasticity_window", 14))
+            eff = int(request.POST.get("efficiency_window", 28))
+            min_click = int(request.POST.get("min_click_threshold", 30))
+        except (ValueError, TypeError):
+            error = "All fields must be integers."
+            return render(request, "dashboard/scoring_config.html", {
+                "config": config, "error": error, "saved": saved,
+            })
+
+        if w_a + w_b + w_c != 100:
+            error = "Weights must sum to 100."
+        elif elast < 7:
+            error = "Elasticity window must be at least 7 days."
+        elif eff < 14:
+            error = "Efficiency window must be at least 14 days."
+        else:
+            config.weight_a = w_a
+            config.weight_b = w_b
+            config.weight_c = w_c
+            config.elasticity_window = elast
+            config.efficiency_window = eff
+            config.min_click_threshold = min_click
+            config.save()
+            saved = True
+
+    return render(request, "dashboard/scoring_config.html", {
+        "config": config,
+        "error": error,
+        "saved": saved,
     })

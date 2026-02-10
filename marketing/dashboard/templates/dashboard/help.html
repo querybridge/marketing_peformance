@@ -20,6 +20,7 @@
     <a class="item" href="#concepts">Core Concepts</a>
     <a class="item" href="#setup">First-Time Setup</a>
     <a class="item" href="#cm-workflow">Weekly Campaign Manager Workflow</a>
+    <a class="item" href="#optimization">Weekly Optimization &amp; Scoring</a>
     <a class="item" href="#gm-workflow">Weekly GM / Vertical Owner Walkthrough</a>
     <a class="item" href="#pitfalls">Common Pitfalls &amp; How to Interpret Data</a>
     <a class="item" href="#links">Where to Go Next</a>
@@ -247,6 +248,165 @@
 <div class="ui divider"></div>
 
 {# ══════════════════════════════════════════════════════════════════ #}
+{# 4b. WEEKLY OPTIMIZATION & SCORING                                 #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="optimization">
+  <i class="sliders horizontal icon"></i>
+  <div class="content">Weekly Optimization &amp; Scoring</div>
+</h3>
+
+<p>
+  The <a href="{% url 'dashboard:optimization' %}">Weekly Optimization</a> page scores each campaign
+  on <strong>scalability</strong> (0&ndash;100) and recommends specific bid adjustments.
+  Only campaigns with an actionable recommendation are shown&mdash;campaigns in a
+  &ldquo;hold&rdquo; state are excluded from the table.
+</p>
+
+<h4 class="ui header">Scalability Score (0&ndash;100)</h4>
+<p>
+  A weighted composite of three components. The score determines the traffic-light badge color
+  and the direction/magnitude of the recommendation.
+</p>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:100px"><span class="ui green label">70&ndash;100</span></td>
+      <td><strong>High scalability.</strong> The campaign has room to grow. Recommendation: <em>decrease tROAS</em> (bid more aggressively) to capture incremental revenue.</td>
+    </tr>
+    <tr>
+      <td><span class="ui yellow label">40&ndash;69</span></td>
+      <td><strong>Moderate.</strong> Campaigns in this range only appear if a seasonality adjustment is triggered (see below); otherwise they are excluded as &ldquo;hold.&rdquo;</td>
+    </tr>
+    <tr>
+      <td><span class="ui red label">0&ndash;39</span></td>
+      <td><strong>Low scalability.</strong> Efficiency or budget constraints suggest pulling back. Recommendation: <em>increase tROAS</em> (bid less aggressively) to improve efficiency.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">Score Components</h4>
+<table class="ui definition compact table">
+  <tbody>
+    <tr>
+      <td class="three wide"><strong>A &mdash; Elasticity</strong></td>
+      <td>
+        Measures how responsively clicks increase when spend increases (log-log regression over the Elasticity Window).
+        A high elasticity means the campaign can absorb more spend productively. Default weight: <strong>40%</strong>.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>B &mdash; Budget Binding</strong></td>
+      <td>
+        Proxy for budget headroom. Compares the campaign's current spend against an implied budget derived
+        from last year's spend share within the vertical. A low utilization rate means room to scale.
+        Default weight: <strong>30%</strong>.
+      </td>
+    </tr>
+    <tr>
+      <td><strong>C &mdash; Efficiency Stability</strong></td>
+      <td>
+        Weekly ROAS and CVR coefficient of variation, shrunk toward the peer group
+        (same Source &times; Campaign Type within the vertical). Stable efficiency means the campaign is predictable
+        and safe to scale. Default weight: <strong>30%</strong>.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  Weights and window sizes can be adjusted on the <a href="{% url 'dashboard:scoring_config' %}">Scoring Configuration</a> page.
+</p>
+
+<h4 class="ui header">Recommendations</h4>
+<table class="ui compact celled table">
+  <thead>
+    <tr>
+      <th style="width:25%">Type</th>
+      <th>When It Fires</th>
+      <th>What It Means</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Decrease tROAS by X%</strong></td>
+      <td>Score &ge; 70</td>
+      <td>Lower the target ROAS to bid more aggressively. The campaign has high elasticity and/or budget headroom. Magnitude is capped at &plusmn;15% per week.</td>
+    </tr>
+    <tr>
+      <td><strong>Increase tROAS by X%</strong></td>
+      <td>Score &lt; 40</td>
+      <td>Raise the target ROAS to pull back spend. The campaign is constrained by budget, volatile efficiency, or low elasticity. Magnitude is capped at &plusmn;15% per week.</td>
+    </tr>
+    <tr>
+      <td><strong>Seasonality Adjustment +X%</strong></td>
+      <td>Score &ge; 60 <em>and</em> vertical revenue pacing &lt; 90% of goal <em>and</em> MTS pacing &le; 110% of goal</td>
+      <td>A <em>temporary</em> bid boost to help the vertical catch up on revenue pacing. Use when mid-month revenue is behind but efficiency is still acceptable. Remove after the pacing gap closes.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">Reason Badges</h4>
+<p>Each campaign row shows color-coded reason badges that explain <em>why</em> the recommendation was made:</p>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:220px"><span class="ui mini green label">High Elasticity</span></td>
+      <td>Component A &ge; 0.7 &mdash; clicks scale well with additional spend.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini red label">Low Elasticity</span></td>
+      <td>Component A &le; 0.3 &mdash; diminishing returns on incremental spend.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini green label">Budget Headroom</span></td>
+      <td>Component B &ge; 0.7 &mdash; campaign is well below its implied budget.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini red label">Budget Constrained</span></td>
+      <td>Component B &le; 0.3 &mdash; campaign is at or over its implied budget.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini green label">Stable Efficiency</span></td>
+      <td>Component C &ge; 0.7 &mdash; ROAS and CVR are consistent week-to-week.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini red label">Volatile Efficiency</span></td>
+      <td>Component C &le; 0.3 &mdash; high week-to-week variance in efficiency.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini green label">Scale Opportunity</span></td>
+      <td>Score &ge; 70 &mdash; tROAS decrease recommended.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini red label">Efficiency Concern</span></td>
+      <td>Score &lt; 40 &mdash; tROAS increase recommended.</td>
+    </tr>
+    <tr>
+      <td><span class="ui mini red label">Rev Pacing Behind</span></td>
+      <td>Seasonality adjustment triggered due to vertical revenue pacing behind goal.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">MTS Column</h4>
+<p>
+  The MTS column shows each campaign's Marketing-to-Sales ratio (Spend &divide; Platform Conversion Value)
+  for the selected analysis period. This uses the same period filter applied to the rest of the table.
+  Since this is campaign-level data, the denominator is platform-reported conversion value, not backend
+  revenue (which only exists at the brand level).
+</p>
+
+<h4 class="ui header">Revenue at Risk</h4>
+<p>
+  A <span class="ui mini red label"><i class="exclamation triangle icon"></i> Revenue at Risk</span> badge
+  appears on a brand group header when the brand's projected monthly revenue (based on MTD actuals) falls
+  short of its budget goal. A vertical-level alert banner appears at the top of the page when the entire
+  vertical is projected to miss its revenue goal while also exceeding its MTS target.
+</p>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
 {# 5. WEEKLY GM / VERTICAL OWNER WALKTHROUGH                        #}
 {# ══════════════════════════════════════════════════════════════════ #}
 <h3 class="ui header" id="gm-workflow">
@@ -365,6 +525,20 @@
     <div class="content">
       <a class="header" href="{% url 'dashboard:index' %}">Overview</a>
       <div class="description">Weekly performance view with charts, brand table, and alert classifications.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="sliders horizontal icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:optimization' %}">Weekly Optimization</a>
+      <div class="description">Campaign-level scalability scoring and tROAS/seasonality recommendations.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="cog icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:scoring_config' %}">Scoring Configuration</a>
+      <div class="description">Adjust component weights, window sizes, and minimum click thresholds for the scoring engine.</div>
     </div>
   </div>
   <div class="item">

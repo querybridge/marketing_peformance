@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -275,3 +276,27 @@ class FactBudget(models.Model):
 
     def __str__(self):
         return f"{self.brand} — {self.month}"
+
+
+class ScoringConfig(models.Model):
+    """Singleton configuration for the weekly optimization scoring engine."""
+
+    elasticity_window = models.PositiveSmallIntegerField(default=14)
+    efficiency_window = models.PositiveSmallIntegerField(default=28)
+    weight_a = models.PositiveSmallIntegerField(default=40)   # Elasticity
+    weight_b = models.PositiveSmallIntegerField(default=30)   # Budget Binding
+    weight_c = models.PositiveSmallIntegerField(default=30)   # Efficiency Stability
+    min_click_threshold = models.PositiveSmallIntegerField(default=30)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        if self.weight_a + self.weight_b + self.weight_c != 100:
+            raise ValidationError("Weights must sum to 100.")
+
+    @classmethod
+    def load(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self):
+        return f"ScoringConfig (A={self.weight_a} B={self.weight_b} C={self.weight_c})"
