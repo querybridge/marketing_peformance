@@ -1638,13 +1638,33 @@ def match_campaigns(request):
         campaign_ids = request.POST.getlist("campaign_id")
         for cid in campaign_ids:
             brand_id = request.POST.get(f"brand_{cid}")
+            new_vertical_id = request.POST.get(f"vertical_{cid}")
+
+            try:
+                campaign = DimCampaign.objects.get(id=cid)
+            except DimCampaign.DoesNotExist:
+                error = f"Could not update campaign {cid}."
+                continue
+
+            # Vertical reassignment: move to Unknown brand in target vertical
+            if new_vertical_id:
+                new_vertical_id = int(new_vertical_id)
+                current_vertical_id = campaign.brand.vertical_id
+                if new_vertical_id != current_vertical_id:
+                    target_vertical = DimVertical.objects.filter(id=new_vertical_id).first()
+                    if target_vertical:
+                        unknown_brand, _ = DimBrand.objects.get_or_create(
+                            slug="unknown", vertical=target_vertical,
+                            defaults={"name": "Unknown"},
+                        )
+                        campaign.brand = unknown_brand
+                        campaign.save(update_fields=["brand_id"])
+                        continue  # skip brand assignment — now in different vertical
+
+            # Existing brand assignment (only if vertical didn't change)
             if brand_id:
-                try:
-                    campaign = DimCampaign.objects.get(id=cid)
-                    campaign.brand_id = int(brand_id)
-                    campaign.save(update_fields=["brand_id"])
-                except (DimCampaign.DoesNotExist, ValueError):
-                    error = f"Could not update campaign {cid}."
+                campaign.brand_id = int(brand_id)
+                campaign.save(update_fields=["brand_id"])
         saved = True
 
     # Only Unknown campaigns (slug="unknown") in the selected vertical
