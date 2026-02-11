@@ -833,14 +833,13 @@ def drill_table(period, group_by, rev_type="net", **filters):
         mp = media_by_campaign(
             period.compare, brand_id, filters["source_id"], filters["type_id"]
         )
-        objs = {
-            c.id: c.name
-            for c in DimCampaign.objects.filter(
-                brand_id=brand_id,
-                source_id=filters["source_id"],
-                campaign_type_id=filters["type_id"],
-            )
-        }
+        campaign_qs = DimCampaign.objects.filter(
+            brand_id=brand_id,
+            source_id=filters["source_id"],
+            campaign_type_id=filters["type_id"],
+        )
+        objs = {c.id: c.name for c in campaign_qs}
+        ad_groups = {c.id: c.ad_group_name for c in campaign_qs}
     else:
         return []
 
@@ -874,7 +873,7 @@ def drill_table(period, group_by, rev_type="net", **filters):
         cur_avg_cv = cur_rev / cur_conversions if cur_conversions else 0
         cmp_avg_cv = cmp_rev / cmp_conversions if cmp_conversions else 0
 
-        rows.append({
+        row = {
             "id": obj_id,
             "name": name,
             "spend": cur_spend,
@@ -893,7 +892,10 @@ def drill_table(period, group_by, rev_type="net", **filters):
             "src_cvr_delta": _pct(cur_src_cvr, cmp_src_cvr),
             "avg_conv_value": round(cur_avg_cv, 2),
             "avg_conv_value_delta": _pct(cur_avg_cv, cmp_avg_cv),
-        })
+        }
+        if group_by == "campaign":
+            row["ad_group_name"] = ad_groups.get(obj_id, "")
+        rows.append(row)
 
     return sorted(rows, key=lambda r: r["spend"], reverse=True)
 

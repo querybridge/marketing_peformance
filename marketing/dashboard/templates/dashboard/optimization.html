@@ -117,6 +117,7 @@
     <thead>
       <tr>
         <th>Campaign</th>
+        <th>Ad Group</th>
         <th>Source</th>
         <th>Type</th>
         <th class="right aligned">Spend</th>
@@ -135,6 +136,7 @@
       {% for row in group.campaigns %}
       <tr>
         <td>{{ row.campaign_name }}</td>
+        <td>{{ row.ad_group_name|default:"—" }}</td>
         <td>{{ row.source_name }}</td>
         <td>{{ row.campaign_type_name }}</td>
         <td class="right aligned">{{ row.spend|currency }}</td>

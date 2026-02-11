@@ -5,6 +5,7 @@
     <tr class="drill-header">
       <th></th>
       <th>{{ drill_level|title }}</th>
+      {% if drill_level == "campaign" %}<th>Ad Group</th>{% endif %}
       <th class="right aligned">Spend</th>
       <th class="right aligned">Δ</th>
       <th class="right aligned">Revenue</th>
@@ -33,6 +34,7 @@
         {% endif %}
       </td>
       <td>{{ row.name }}</td>
+      {% if drill_level == "campaign" %}<td>{{ row.ad_group_name|default:"—" }}</td>{% endif %}
       <td class="right aligned">{{ row.spend|currency }}</td>
       <td class="right aligned {{ row.spend_delta|good_up }}">{{ row.spend_delta|pct }}</td>
       <td class="right aligned">{{ row.revenue|currency }}</td>

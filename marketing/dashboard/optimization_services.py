@@ -464,6 +464,7 @@ def check_vertical_alert(
 class CampaignScore:
     campaign_id: int
     campaign_name: str
+    ad_group_name: str
     source_name: str
     campaign_type_name: str
     brand_name: str
@@ -708,6 +709,7 @@ def build_optimization_table(
         results.append(CampaignScore(
             campaign_id=camp.id,
             campaign_name=camp.name,
+            ad_group_name=camp.ad_group_name,
             source_name=camp.source.name,
             campaign_type_name=camp.campaign_type.name,
             brand_name=camp.brand.name,

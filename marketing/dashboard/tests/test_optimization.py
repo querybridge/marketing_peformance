@@ -606,7 +606,8 @@ class GroupByBrandTests(SimpleTestCase):
 
     def _make_score(self, brand_name, brand_id, spend):
         return CampaignScore(
-            campaign_id=1, campaign_name="C", source_name="S",
+            campaign_id=1, campaign_name="C", ad_group_name="",
+            source_name="S",
             campaign_type_name="T", brand_name=brand_name,
             brand_id=brand_id, spend=spend, clicks=10,
             conversions=1, conv_value=100.0, roas=1.0, mts=0.1,
@@ -691,7 +692,8 @@ class SpendDescSortTests(SimpleTestCase):
     def test_campaign_score_dataclass_has_brand_id(self):
         """CampaignScore should have a brand_id field."""
         cs = CampaignScore(
-            campaign_id=1, campaign_name="C", source_name="S",
+            campaign_id=1, campaign_name="C", ad_group_name="",
+            source_name="S",
             campaign_type_name="T", brand_name="B", brand_id=42,
             spend=100.0, clicks=10, conversions=1, conv_value=100.0,
             roas=1.0, mts=0.1, source_cvr=0.1, scalability_score=50,
@@ -749,7 +751,8 @@ class MTSColumnTests(SimpleTestCase):
     def test_mts_computed(self):
         """MTS = spend / conv_value."""
         cs = CampaignScore(
-            campaign_id=1, campaign_name="C", source_name="S",
+            campaign_id=1, campaign_name="C", ad_group_name="",
+            source_name="S",
             campaign_type_name="T", brand_name="B", brand_id=1,
             spend=250.0, clicks=100, conversions=5, conv_value=1000.0,
             roas=4.0, mts=0.25, source_cvr=0.05, scalability_score=60,
@@ -764,7 +767,8 @@ class MTSColumnTests(SimpleTestCase):
     def test_mts_none_when_no_conv_value(self):
         """MTS is None when conversion value is zero."""
         cs = CampaignScore(
-            campaign_id=1, campaign_name="C", source_name="S",
+            campaign_id=1, campaign_name="C", ad_group_name="",
+            source_name="S",
             campaign_type_name="T", brand_name="B", brand_id=1,
             spend=100.0, clicks=10, conversions=0, conv_value=0.0,
             roas=None, mts=None, source_cvr=0.0, scalability_score=30,

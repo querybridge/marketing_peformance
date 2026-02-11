@@ -1462,15 +1462,19 @@ def upload_csv(request):
     # ── Pre-load campaign lookups ────────────────────────────────────
     # ext_id uniqueness is per-source (across ALL verticals), so the
     # ext_id cache must be source-wide to avoid IntegrityError on create.
-    # Name lookup stays vertical-scoped for correct brand assignment.
     campaigns_by_ext_id = {}
     for c in DimCampaign.objects.filter(source=source).exclude(external_id=""):
         campaigns_by_ext_id[c.external_id] = c
 
+    # Brand-aware lookup: (name, brand_id) → campaign.  Handles multi-brand
+    # campaigns where the same campaign name has separate records per brand.
+    campaigns_by_name_brand = {}
+    # Fallback name-only lookup for rows with no brand signal.
     campaigns_by_name = {}
     for c in (DimCampaign.objects
               .filter(source=source, brand__vertical=vertical)
               .select_related("brand")):
+        campaigns_by_name_brand[(c.name.lower(), c.brand_id)] = c
         campaigns_by_name[c.name.lower()] = c
 
     # Pre-load campaign types by lowercase name for lookup
@@ -1517,28 +1521,63 @@ def upload_csv(request):
         ext_id = (_cell(row, "external_id") or "").strip()
         ad_group_name = (_cell(row, "ad_group") or "").strip()
 
-        campaign = None
-        if ext_id and ext_id in campaigns_by_ext_id:
-            campaign = campaigns_by_ext_id[ext_id]
-        elif campaign_name and campaign_name.lower() in campaigns_by_name:
-            campaign = campaigns_by_name[campaign_name.lower()]
+        if not campaign_name:
+            errors.append(f"Row {row_num}: missing campaign name, skipped.")
+            continue
 
-        # Safety guard: discard match if the campaign belongs to a different
-        # source (should not happen with source-scoped lookup, but prevents
-        # cross-source data contamination if stale data slips through).
+        # ── Resolve brand FIRST (ad group takes precedence) ──────
+        row_brand = None
+        matched_from = "unknown"
+
+        if ad_group_name:
+            row_brand = _resolve_brand_id_from_name(ad_group_name, vertical)
+            if row_brand:
+                matched_from = "ad_group"
+
+        if not row_brand:
+            row_brand = _resolve_brand_id_from_name(campaign_name, vertical)
+            if row_brand:
+                matched_from = "campaign"
+
+        # ── Campaign lookup — brand-aware for multi-brand campaigns ──
+        campaign = None
+        name_lower = campaign_name.lower()
+
+        if row_brand:
+            # Known brand: find the campaign record for THIS brand
+            key = (name_lower, row_brand.id)
+            if key in campaigns_by_name_brand:
+                campaign = campaigns_by_name_brand[key]
+            elif ext_id and ext_id in campaigns_by_ext_id:
+                existing = campaigns_by_ext_id[ext_id]
+                if existing.brand_id == row_brand.id:
+                    campaign = existing
+                # else: ext_id belongs to a different brand's record — skip it
+        else:
+            # No brand signal: fall back to ext_id then name
+            if ext_id and ext_id in campaigns_by_ext_id:
+                campaign = campaigns_by_ext_id[ext_id]
+            elif name_lower in campaigns_by_name:
+                campaign = campaigns_by_name[name_lower]
+
+        # Safety guard: discard match if wrong source
         if campaign and campaign.source_id != source.id:
             campaign = None
 
         if campaign:
+            update_fields = []
             if ad_group_name and campaign.ad_group_name != ad_group_name:
                 campaign.ad_group_name = ad_group_name
-                campaign.save(update_fields=["ad_group_name"])
+                update_fields.append("ad_group_name")
+            # Re-resolve brand for existing campaigns still on Unknown
+            if row_brand and campaign.brand_id == unknown_brand.id:
+                campaign.brand = row_brand
+                campaign.matched_from = matched_from
+                update_fields.extend(["brand_id", "matched_from"])
+            if update_fields:
+                campaign.save(update_fields=update_fields)
 
         if not campaign:
-            if not campaign_name:
-                errors.append(f"Row {row_num}: missing campaign name, skipped.")
-                continue
-
             # Resolve campaign type from CSV column
             type_val = (_cell(row, "campaign_type") or "").strip()
             if type_val and type_val.lower() in types_by_name:
@@ -1561,21 +1600,7 @@ def upload_csv(request):
                     types_by_name[fallback] = ctype
                     types_created += 1
 
-            # Auto-assign brand via brand_id prefix — ad group takes precedence
-            brand_for_campaign = unknown_brand
-            matched_from = "unknown"
-
-            if ad_group_name:
-                resolved = _resolve_brand_id_from_name(ad_group_name, vertical)
-                if resolved:
-                    brand_for_campaign = resolved
-                    matched_from = "ad_group"
-
-            if matched_from == "unknown":
-                resolved = _resolve_brand_id_from_name(campaign_name, vertical)
-                if resolved:
-                    brand_for_campaign = resolved
-                    matched_from = "campaign"
+            brand_for_campaign = row_brand or unknown_brand
 
             if matched_from == "ad_group":
                 matched_by_ad_group += 1
@@ -1584,10 +1609,16 @@ def upload_csv(request):
             else:
                 matched_unknown += 1
 
+            # For multi-brand campaigns, only the first brand record
+            # keeps the ext_id (DB constraint: unique per source).
+            use_ext_id = ext_id
+            if ext_id and ext_id in campaigns_by_ext_id:
+                use_ext_id = ""  # another brand already owns this ext_id
+
             # Auto-create campaign
             campaign = DimCampaign.objects.create(
                 name=campaign_name,
-                external_id=ext_id,
+                external_id=use_ext_id,
                 brand=brand_for_campaign,
                 source=source,
                 campaign_type=ctype,
@@ -1595,9 +1626,10 @@ def upload_csv(request):
                 ad_group_name=ad_group_name,
                 matched_from=matched_from,
             )
-            if ext_id:
-                campaigns_by_ext_id[ext_id] = campaign
-            campaigns_by_name[campaign_name.lower()] = campaign
+            if use_ext_id:
+                campaigns_by_ext_id[use_ext_id] = campaign
+            campaigns_by_name_brand[(name_lower, brand_for_campaign.id)] = campaign
+            campaigns_by_name[name_lower] = campaign
             campaigns_created += 1
 
         # Parse date
@@ -2261,7 +2293,7 @@ def export_optimization_xlsx(request):
     ws.title = "Optimization"
 
     headers = [
-        "Campaign", "Source", "Campaign Type", "Brand",
+        "Campaign", "Ad Group", "Source", "Campaign Type", "Brand",
         "Spend", "Clicks", "Conversions", "Conv Value", "ROAS", "MTS",
         "Source CVR", "Scalability Score",
         "Comp A (Elasticity)", "Comp B (Budget)", "Comp C (Stability)",
@@ -2280,26 +2312,27 @@ def export_optimization_xlsx(request):
 
     for row_idx, r in enumerate(rows, 2):
         ws.cell(row=row_idx, column=1, value=r.campaign_name)
-        ws.cell(row=row_idx, column=2, value=r.source_name)
-        ws.cell(row=row_idx, column=3, value=r.campaign_type_name)
-        ws.cell(row=row_idx, column=4, value=r.brand_name)
-        ws.cell(row=row_idx, column=5, value=round(r.spend, 2))
-        ws.cell(row=row_idx, column=6, value=r.clicks)
-        ws.cell(row=row_idx, column=7, value=r.conversions)
-        ws.cell(row=row_idx, column=8, value=round(r.conv_value, 2))
-        ws.cell(row=row_idx, column=9, value=round(r.roas, 4) if r.roas else None)
-        ws.cell(row=row_idx, column=10, value=round(r.mts, 4) if r.mts else None)
-        ws.cell(row=row_idx, column=11, value=round(r.source_cvr, 4) if r.source_cvr else None)
-        ws.cell(row=row_idx, column=12, value=r.scalability_score)
-        ws.cell(row=row_idx, column=13, value=r.comp_a)
-        ws.cell(row=row_idx, column=14, value=r.comp_b)
-        ws.cell(row=row_idx, column=15, value=r.comp_c)
-        ws.cell(row=row_idx, column=16, value=r.expected_conversions)
-        ws.cell(row=row_idx, column=17, value=r.cvr_baseline)
-        ws.cell(row=row_idx, column=18, value="Yes" if r.used_peer_cvr else "No")
-        ws.cell(row=row_idx, column=19, value=r.detail)
-        ws.cell(row=row_idx, column=20, value=r.magnitude)
-        ws.cell(row=row_idx, column=21, value="; ".join(r.reason_codes))
+        ws.cell(row=row_idx, column=2, value=r.ad_group_name)
+        ws.cell(row=row_idx, column=3, value=r.source_name)
+        ws.cell(row=row_idx, column=4, value=r.campaign_type_name)
+        ws.cell(row=row_idx, column=5, value=r.brand_name)
+        ws.cell(row=row_idx, column=6, value=round(r.spend, 2))
+        ws.cell(row=row_idx, column=7, value=r.clicks)
+        ws.cell(row=row_idx, column=8, value=r.conversions)
+        ws.cell(row=row_idx, column=9, value=round(r.conv_value, 2))
+        ws.cell(row=row_idx, column=10, value=round(r.roas, 4) if r.roas else None)
+        ws.cell(row=row_idx, column=11, value=round(r.mts, 4) if r.mts else None)
+        ws.cell(row=row_idx, column=12, value=round(r.source_cvr, 4) if r.source_cvr else None)
+        ws.cell(row=row_idx, column=13, value=r.scalability_score)
+        ws.cell(row=row_idx, column=14, value=r.comp_a)
+        ws.cell(row=row_idx, column=15, value=r.comp_b)
+        ws.cell(row=row_idx, column=16, value=r.comp_c)
+        ws.cell(row=row_idx, column=17, value=r.expected_conversions)
+        ws.cell(row=row_idx, column=18, value=r.cvr_baseline)
+        ws.cell(row=row_idx, column=19, value="Yes" if r.used_peer_cvr else "No")
+        ws.cell(row=row_idx, column=20, value=r.detail)
+        ws.cell(row=row_idx, column=21, value=r.magnitude)
+        ws.cell(row=row_idx, column=22, value="; ".join(r.reason_codes))
 
     vertical = DimVertical.objects.filter(id=vertical_id).first()
     slug = vertical.slug if vertical else "unknown"
