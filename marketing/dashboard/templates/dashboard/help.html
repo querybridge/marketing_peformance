@@ -110,6 +110,10 @@
       <td>An individual ad-platform campaign (Google Ads, Meta, Amazon, etc.). Campaigns carry daily spend, click, and conversion data.</td>
     </tr>
     <tr>
+      <td><strong>Ad Group</strong></td>
+      <td>A subdivision within a campaign. When campaign media CSV includes an &ldquo;Ad group&rdquo; column, the drill-down shows one row per ad group with its own metrics. Multi-brand campaigns (where different ad groups target different brands) are automatically split so each brand sees only its own ad group data.</td>
+    </tr>
+    <tr>
       <td><strong>MTS</strong></td>
       <td>Marketing-to-Sales ratio = Spend &divide; Revenue. An MTS of 25% means you spend $0.25 for every $1 of revenue. <strong>Lower is more efficient</strong>, but too low may mean you are under-investing and leaving revenue on the table.</td>
     </tr>
@@ -166,7 +170,7 @@
   <div class="item">
     <div class="content">
       <div class="header">Upload Campaign Media Data</div>
-      Go to <a href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>. Upload CSV exports from Google Ads, Bing Ads, Meta Ads, or Amazon Marketplace. The system auto-creates campaigns it hasn't seen before.
+      Go to <a href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>. Upload CSV exports from Google Ads, Bing Ads, Meta Ads, or Amazon Marketplace. The system auto-creates campaigns it hasn't seen before. <strong>Include the &ldquo;Ad group&rdquo; column</strong> in your export to enable per-ad-group drill-down metrics.
     </div>
   </div>
   <div class="item">
@@ -233,7 +237,12 @@
 <h4 class="ui header">Step 4: Drill Down (When Needed)</h4>
 <p>
   Click a brand row to expand it and see Source-level, then Campaign Type-level, then Campaign-level breakdowns.
-  <strong>Drill down when:</strong> a brand's alert status doesn't match your expectation, or you need to find which specific campaigns to pause or scale.
+  At the campaign level, each row represents an individual <strong>ad group</strong> (when ad-group data was included in the CSV upload).
+  This lets you see exactly which ad group within a shared campaign is driving spend and conversions.
+  If no ad group data was uploaded, the Ad Group column shows &ldquo;&mdash;&rdquo; and metrics reflect the whole campaign.
+</p>
+<p>
+  <strong>Drill down when:</strong> a brand's alert status doesn't match your expectation, or you need to find which specific campaigns or ad groups to pause or scale.
   <strong>Don't drill down when:</strong> the brand is "Doing Well" and you just need a quick status check.
 </p>
 
@@ -505,6 +514,10 @@
     <tr>
       <td><strong>MTS shows "&mdash;" for a brand</strong></td>
       <td>Revenue is zero for the selected period (no CSV data uploaded, or zero orders). MTS is undefined when revenue is zero&mdash;the dashboard shows a dash instead of infinity or zero.</td>
+    </tr>
+    <tr>
+      <td><strong>Ad Group column shows "&mdash;" in drill-down</strong></td>
+      <td>The CSV used for the upload did not include an &ldquo;Ad group&rdquo; column, so metrics are stored at the campaign level. Re-upload your ad platform export with the Ad Group column included (e.g., add &ldquo;Ad group&rdquo; as a segment in Google Ads) to see per-ad-group breakdowns.</td>
     </tr>
   </tbody>
 </table>

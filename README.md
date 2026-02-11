@@ -4,13 +4,13 @@ A Django application for tracking paid marketing performance across verticals, b
 
 ## Key Features
 
-- **Brand performance table** with drill-down: Vertical > Brand > Source > Campaign Type > Campaign
+- **Brand performance table** with drill-down: Vertical > Brand > Source > Campaign Type > Campaign (with per-ad-group rows)
 - **Brand focus mode**: Click a brand row to scope top-level charts and badges to that single brand; click again to deselect
 - **7 automated alerts**: Needs Attention, Pacing Risk, Over/Under Efficient, Doing Well, Missing Revenue, Missing Budget
 - **Trend charts**: Daily Revenue, Spend, MTS, Orders, AOV, Net CVR with current vs. comparison period
 - **MTS budget bounds**: Upper/lower threshold lines (+-50 bps) on the daily MTS chart
 - **Revenue toggle**: Switch between Net Revenue, New Revenue, and Platform Revenue (ad-platform conversion value)
-- **CSV import**: Campaign media data from Google Ads, Bing Ads, Meta Ads, and Amazon Marketplace with auto-column detection and cross-source safety guards
+- **CSV import**: Campaign media data from Google Ads, Bing Ads, Meta Ads, and Amazon Marketplace with auto-column detection, cross-source safety guards, and per-ad-group storage when the CSV includes an Ad Group column
 - **Revenue upload**: Order/revenue data (CSV) mapped to brands via site IDs
 - **Campaign matching**: Reassign auto-created campaigns to the correct brand after import (brand_id prefix auto-assignment)
 - **Budget management**: Monthly revenue and MTS targets at vertical level, auto-distributed to brands with manual override support
@@ -26,14 +26,14 @@ Star schema with four fact tables at different grains:
 
 | Table | Grain | Source |
 |-------|-------|--------|
-| FactMediaDaily | campaign x day | CSV upload / ad platform export |
+| FactMediaDaily | campaign x day x ad_group | CSV upload / ad platform export |
 | FactOrdersDaily | brand x day | CSV upload from order/revenue system |
 | FactVerticalBudget | vertical x month | Manual form entry |
 | FactBudget | brand x month | Auto-distributed from vertical budget (with manual override) |
 
 Dimension hierarchy: **Vertical > Brand > Source > Campaign Type > Campaign**
 
-Supporting dimensions: DimDate (calendar spine), DimVertical, DimBrand (with external brand_id), DimSource, DimCampaignType, DimCampaign (with UniqueConstraint on external_id + source), DimSite (site_id-to-vertical mapping for revenue ingest), ScoringConfig (singleton for optimization weights/windows).
+Supporting dimensions: DimDate (calendar spine), DimVertical, DimBrand (with external brand_id), DimSource, DimCampaignType, DimCampaign (with UniqueConstraint on external_id + source, ad_group_name for brand matching), DimSite (site_id-to-vertical mapping for revenue ingest), ScoringConfig (singleton for optimization weights/windows).
 
 Revenue exists only at brand level. Below brand, revenue is allocated proportionally by spend share.
 
@@ -90,7 +90,9 @@ The upload view accepts CSV exports from:
 
 Cross-source safety: campaigns are scoped by source during matching, with a DB-level unique constraint on (external_id, source) and a runtime source-verification guard to prevent data contamination across ad platforms.
 
-Campaign names with a brand_id prefix (e.g. `123; My Campaign`) are auto-assigned to the matching brand. Unknown sources use generic column-name detection. Remaining unknown campaigns are created under the "Unknown" brand — use the Match Campaigns view to assign them.
+**Ad-group-level granularity:** When the CSV includes an "Ad group" column, FactMediaDaily stores one row per campaign × day × ad_group. The brand performance drill-down shows individual ad group rows with correct per-ad-group metrics. CSVs without an "Ad group" column still work — rows are stored at the campaign × day level (ad_group_name defaults to blank). Stale campaign-level rows are automatically cleaned up when ad-group-level rows are uploaded for the same campaign and date. The upload summary confirms whether the Ad Group column was detected.
+
+Campaign names with a brand_id prefix (e.g. `123; My Campaign`) are auto-assigned to the matching brand. Ad group names are also used for brand resolution (ad group match takes precedence over campaign name match). Unknown sources use generic column-name detection. Remaining unknown campaigns are created under the "Unknown" brand — use the Match Campaigns view to assign them.
 
 ## Date Engine
 
