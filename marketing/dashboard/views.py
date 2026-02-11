@@ -1116,6 +1116,7 @@ COLUMN_MAPS = {
     "google-ads": {
         "campaign":         "Campaign",
         "external_id":      "Campaign ID",
+        "ad_group":         "Ad group",
         "campaign_type":    "Campaign type",
         "date":             "Day",
         "impressions":      "Impr.",
@@ -1129,8 +1130,9 @@ COLUMN_MAPS = {
     "bing-ads": {
         "campaign":         ["Campaign name", "Campaign"],
         "external_id":      "Campaign ID",
+        "ad_group":         ["Ad group", "Ad group name"],
         "campaign_type":    ["Ad distribution", "Campaign type"],
-        "date":             ["Time period", "Date"],
+        "date":             ["Time period", "Date", "Day"],
         "impressions":      "Impressions",
         "clicks":           "Clicks",
         "cost":             ["Spend", "Cost"],
@@ -1142,6 +1144,7 @@ COLUMN_MAPS = {
     "meta-ads": {
         "campaign":         "Campaign name",
         "external_id":      "Campaign ID",
+        "ad_group":         ["Ad group name", "Ad set name"],
         "campaign_type":    "Campaign type",
         "date":             "Day",
         "impressions":      "Impressions",
@@ -1153,6 +1156,7 @@ COLUMN_MAPS = {
     "amazon-marketplace-sponsored": {
         "campaign":         "Campaign name",
         "external_id":      "Campaign ID",
+        "ad_group":         "Ad group name",
         "campaign_type":    "Campaign type",
         "date":             "Day",
         "impressions":      "Impressions",
@@ -1164,6 +1168,7 @@ COLUMN_MAPS = {
     "amazon-marketplace-feed": {
         "campaign":         "Campaign name",
         "external_id":      "Campaign ID",
+        "ad_group":         "Ad group name",
         "campaign_type":    "Campaign type",
         "date":             "Day",
         "clicks":           "Sessions",
@@ -1188,6 +1193,7 @@ _GENERIC_NAMES = {
     "impression_share": ["impression share", "search impr. share",
                          "impression share %", "impr. share"],
     "click_share":      ["click share", "click share %"],
+    "ad_group":         ["ad group", "ad_group", "adgroup", "ad group name", "ad set name"],
 }
 
 
@@ -1196,7 +1202,7 @@ def _parse_csv_date(val):
     if not val or not val.strip():
         return None
     val = val.strip()
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"):
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%m/%d/%y", "%d/%m/%y"):
         try:
             return date(*__import__("datetime").datetime.strptime(val, fmt).timetuple()[:3])
         except ValueError:
@@ -1290,6 +1296,26 @@ def _parse_share(val):
     if d > Decimal("1.00"):
         d = Decimal("1.00")
     return d
+
+
+_BRAND_ID_RE = re.compile(r'^\s*(\d+)\s*;\s*')
+
+
+def _resolve_brand_id_from_name(name, vertical):
+    """Parse brand_id prefix from name, resolve to DimBrand or None."""
+    m = _BRAND_ID_RE.match(name)
+    if not m:
+        return None
+    parsed_brand_id = int(m.group(1))
+    found = DimBrand.objects.filter(brand_id=parsed_brand_id, vertical=vertical).first()
+    if not found:
+        global_brand = DimBrand.objects.filter(brand_id=parsed_brand_id).first()
+        if global_brand:
+            found = DimBrand.objects.create(
+                name=global_brand.name, slug=slugify(global_brand.name),
+                brand_id=parsed_brand_id, vertical=vertical,
+            )
+    return found
 
 
 def _detect_header_row(lines, source_slug):
@@ -1433,17 +1459,18 @@ def upload_csv(request):
 
     reader = csv.reader(io.StringIO("\n".join(data_lines)))
 
-    # ── Pre-load campaign lookups (scoped to vertical + source) ──────
-    source_campaigns = (
-        DimCampaign.objects
-        .filter(source=source, brand__vertical=vertical)
-        .select_related("brand")
-    )
+    # ── Pre-load campaign lookups ────────────────────────────────────
+    # ext_id uniqueness is per-source (across ALL verticals), so the
+    # ext_id cache must be source-wide to avoid IntegrityError on create.
+    # Name lookup stays vertical-scoped for correct brand assignment.
     campaigns_by_ext_id = {}
+    for c in DimCampaign.objects.filter(source=source).exclude(external_id=""):
+        campaigns_by_ext_id[c.external_id] = c
+
     campaigns_by_name = {}
-    for c in source_campaigns:
-        if c.external_id:
-            campaigns_by_ext_id[c.external_id] = c
+    for c in (DimCampaign.objects
+              .filter(source=source, brand__vertical=vertical)
+              .select_related("brand")):
         campaigns_by_name[c.name.lower()] = c
 
     # Pre-load campaign types by lowercase name for lookup
@@ -1462,6 +1489,10 @@ def upload_csv(request):
     updated = 0
     campaigns_created = 0
     types_created = 0
+    matched_by_campaign = 0
+    matched_by_ad_group = 0
+    matched_unknown = 0
+    pending_rows = {}  # (campaign_id, date_id) → aggregated metrics
     errors = []
 
     def _cell(row, field):
@@ -1476,9 +1507,15 @@ def upload_csv(request):
         if not any(cell.strip() for cell in row):
             continue  # skip blank rows
 
+        # Skip Bing Ads trailing rows (Total summary, copyright notice)
+        first_cell = row[0].strip() if row else ""
+        if first_cell.lower().startswith(("total", "\u00a9", "(c)")):
+            continue
+
         # Campaign matching
         campaign_name = (_cell(row, "campaign") or "").strip()
         ext_id = (_cell(row, "external_id") or "").strip()
+        ad_group_name = (_cell(row, "ad_group") or "").strip()
 
         campaign = None
         if ext_id and ext_id in campaigns_by_ext_id:
@@ -1491,6 +1528,11 @@ def upload_csv(request):
         # cross-source data contamination if stale data slips through).
         if campaign and campaign.source_id != source.id:
             campaign = None
+
+        if campaign:
+            if ad_group_name and campaign.ad_group_name != ad_group_name:
+                campaign.ad_group_name = ad_group_name
+                campaign.save(update_fields=["ad_group_name"])
 
         if not campaign:
             if not campaign_name:
@@ -1519,30 +1561,28 @@ def upload_csv(request):
                     types_by_name[fallback] = ctype
                     types_created += 1
 
-            # Auto-assign brand via brand_id prefix (e.g. "123; My Campaign")
-            # First check the upload vertical; if not found, look globally
-            # and auto-create the brand in the upload vertical.
+            # Auto-assign brand via brand_id prefix — ad group takes precedence
             brand_for_campaign = unknown_brand
-            m = re.match(r'^(\d+)\s*;\s*', campaign_name)
-            if m:
-                parsed_brand_id = int(m.group(1))
-                found = DimBrand.objects.filter(
-                    brand_id=parsed_brand_id, vertical=vertical,
-                ).first()
-                if not found:
-                    # Look up globally and clone into the upload vertical
-                    global_brand = DimBrand.objects.filter(
-                        brand_id=parsed_brand_id,
-                    ).first()
-                    if global_brand:
-                        found = DimBrand.objects.create(
-                            name=global_brand.name,
-                            slug=slugify(global_brand.name),
-                            brand_id=parsed_brand_id,
-                            vertical=vertical,
-                        )
-                if found:
-                    brand_for_campaign = found
+            matched_from = "unknown"
+
+            if ad_group_name:
+                resolved = _resolve_brand_id_from_name(ad_group_name, vertical)
+                if resolved:
+                    brand_for_campaign = resolved
+                    matched_from = "ad_group"
+
+            if matched_from == "unknown":
+                resolved = _resolve_brand_id_from_name(campaign_name, vertical)
+                if resolved:
+                    brand_for_campaign = resolved
+                    matched_from = "campaign"
+
+            if matched_from == "ad_group":
+                matched_by_ad_group += 1
+            elif matched_from == "campaign":
+                matched_by_campaign += 1
+            else:
+                matched_unknown += 1
 
             # Auto-create campaign
             campaign = DimCampaign.objects.create(
@@ -1552,6 +1592,8 @@ def upload_csv(request):
                 source=source,
                 campaign_type=ctype,
                 amazon_type=amazon_type if source.slug == "amazon-marketplace" else "",
+                ad_group_name=ad_group_name,
+                matched_from=matched_from,
             )
             if ext_id:
                 campaigns_by_ext_id[ext_id] = campaign
@@ -1569,7 +1611,7 @@ def upload_csv(request):
             errors.append(f"Row {row_num}: date {date_val} not found in calendar, skipped.")
             continue
 
-        # Parse metrics
+        # Parse metrics and accumulate by campaign+date
         impressions = _parse_int(_cell(row, "impressions"))
         clicks = _parse_int(_cell(row, "clicks"))
         cost = _parse_decimal(_cell(row, "cost"))
@@ -1578,10 +1620,23 @@ def upload_csv(request):
         impression_share = _parse_share(_cell(row, "impression_share"))
         click_share = _parse_share(_cell(row, "click_share"))
 
-        _, is_created = FactMediaDaily.objects.update_or_create(
-            campaign=campaign,
-            date=dim_date,
-            defaults={
+        key = (campaign.id, dim_date.id)
+        if key in pending_rows:
+            agg = pending_rows[key]
+            agg["impressions"] += impressions
+            agg["clicks"] += clicks
+            agg["cost"] += cost
+            agg["conversions"] += conversions
+            agg["conversion_value"] += conversion_value
+            # Keep share values from the row with the most impressions
+            if impressions > agg["_max_impr"]:
+                agg["_max_impr"] = impressions
+                agg["impression_share"] = impression_share
+                agg["click_share"] = click_share
+        else:
+            pending_rows[key] = {
+                "campaign": campaign,
+                "date": dim_date,
                 "impressions": impressions,
                 "clicks": clicks,
                 "cost": cost,
@@ -1589,6 +1644,22 @@ def upload_csv(request):
                 "conversion_value": conversion_value,
                 "impression_share": impression_share,
                 "click_share": click_share,
+                "_max_impr": impressions,
+            }
+
+    # ── Write aggregated rows to DB ──────────────────────────────────
+    for agg in pending_rows.values():
+        _, is_created = FactMediaDaily.objects.update_or_create(
+            campaign=agg["campaign"],
+            date=agg["date"],
+            defaults={
+                "impressions": agg["impressions"],
+                "clicks": agg["clicks"],
+                "cost": agg["cost"],
+                "conversions": agg["conversions"],
+                "conversion_value": agg["conversion_value"],
+                "impression_share": agg["impression_share"],
+                "click_share": agg["click_share"],
             },
         )
         if is_created:
@@ -1601,6 +1672,9 @@ def upload_csv(request):
         "updated": updated,
         "campaigns_created": campaigns_created,
         "types_created": types_created,
+        "matched_by_campaign": matched_by_campaign,
+        "matched_by_ad_group": matched_by_ad_group,
+        "matched_unknown": matched_unknown,
         "errors": errors,
         "total": created + updated,
         "metadata_rows_skipped": metadata_rows_skipped,

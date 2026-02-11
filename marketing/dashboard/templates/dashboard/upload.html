@@ -94,6 +94,22 @@
         </div>
         {% endif %}
       </div>
+      {% if summary.campaigns_created %}
+      <div class="ui mini statistics" style="margin:0.5em 0">
+        <div class="statistic">
+          <div class="value">{{ summary.matched_by_ad_group }}</div>
+          <div class="label">Matched by Ad Group</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.matched_by_campaign }}</div>
+          <div class="label">Matched by Campaign</div>
+        </div>
+        <div class="statistic">
+          <div class="value">{{ summary.matched_unknown }}</div>
+          <div class="label">Unmatched (Unknown)</div>
+        </div>
+      </div>
+      {% endif %}
       {% if summary.metadata_rows_skipped %}
       <p><i class="info circle icon"></i> Skipped {{ summary.metadata_rows_skipped }} metadata row{{ summary.metadata_rows_skipped|pluralize }} before the header.</p>
       {% endif %}

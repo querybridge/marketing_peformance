@@ -66,6 +66,7 @@
       <tr>
         <th>Campaign</th>
         <th>External ID</th>
+        <th>Ad Group</th>
         <th>Source</th>
         <th>Campaign Type</th>
         <th>Move to Vertical</th>
@@ -77,6 +78,7 @@
       <tr>
         <td>{{ c.name }}</td>
         <td>{{ c.external_id|default:"—" }}</td>
+        <td>{{ c.ad_group_name|default:"—" }}</td>
         <td>{{ c.source.name }}</td>
         <td>{{ c.campaign_type.name }}</td>
         <td>

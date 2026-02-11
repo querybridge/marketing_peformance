@@ -147,6 +147,19 @@ class DimCampaign(models.Model):
     )
     status = models.CharField(max_length=20, choices=STATUS, default="active")
 
+    MATCHED_FROM_CHOICES = [
+        ("campaign", "Campaign Name"),
+        ("ad_group", "Ad Group Name"),
+        ("unknown", "Unknown"),
+    ]
+
+    ad_group_name = models.CharField(
+        max_length=300, blank=True, default="",
+    )
+    matched_from = models.CharField(
+        max_length=20, choices=MATCHED_FROM_CHOICES, default="unknown",
+    )
+
     class Meta:
         ordering = ["source", "campaign_type", "name"]
         constraints = [
