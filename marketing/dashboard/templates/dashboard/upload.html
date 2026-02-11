@@ -116,6 +116,11 @@
       {% if summary.campaigns_created %}
       <p><i class="info circle icon"></i> Auto-created campaigns use the default brand. <a href="{% url 'dashboard:match_campaigns' %}">Reassign brands here.</a></p>
       {% endif %}
+      {% if summary.has_ad_group_col %}
+      <p><i class="check circle icon" style="color:green"></i> Ad Group column detected: {{ summary.ad_group_rows }} ad-group-level rows stored.</p>
+      {% else %}
+      <p><i class="exclamation triangle icon" style="color:orange"></i> No Ad Group column found in CSV. Drill-down will show "—" for Ad Group. Include an "Ad group" column to enable per-ad-group metrics.</p>
+      {% endif %}
     </div>
 
     {% if summary.errors %}

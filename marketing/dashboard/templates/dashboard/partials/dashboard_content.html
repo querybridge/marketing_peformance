@@ -88,8 +88,13 @@
   tr.brand-row.brand-focused { background: #e8f4fd !important; }
 </style>
 <div class="ui segment">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em">
-    <h3 class="ui header" style="margin:0">Brand Performance</h3>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em;flex-wrap:wrap;gap:0.4em">
+    <div style="display:flex;align-items:center;gap:0.6em;flex-wrap:wrap">
+      <h3 class="ui header" style="margin:0">Brand Performance</h3>
+      <span class="ui tiny label">{{ current_start|date:"M d" }} – {{ current_end|date:"M d, Y" }}</span>
+      <span class="ui tiny label">{{ current_days }} day{{ current_days|pluralize }}</span>
+      <span class="ui tiny grey label">{{ period_label }}: {{ compare_start|date:"M d" }} – {{ compare_end|date:"M d" }}</span>
+    </div>
     <div class="ui small icon input" style="width:220px">
       <input type="text" id="brand-filter" name="brand_q" placeholder="Filter by brand…"
              value="{{ brand_q }}"

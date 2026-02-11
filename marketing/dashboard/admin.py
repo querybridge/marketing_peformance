@@ -58,8 +58,9 @@ class DimCampaignAdmin(admin.ModelAdmin):
 
 @admin.register(FactMediaDaily)
 class FactMediaDailyAdmin(admin.ModelAdmin):
-    list_display = ["campaign", "date", "cost", "clicks", "conversions"]
+    list_display = ["campaign", "date", "ad_group_name", "cost", "clicks", "conversions"]
     list_filter = ["campaign__source", "campaign__campaign_type"]
+    search_fields = ["ad_group_name", "campaign__name"]
     raw_id_fields = ["campaign", "date"]
 
 

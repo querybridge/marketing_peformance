@@ -333,6 +333,26 @@ def media_by_campaign(window, brand_id, source_id, type_id):
     )
 
 
+def media_by_ad_group(window, brand_id, source_id, type_id):
+    """Aggregate media by (campaign_id, ad_group_name)."""
+    qs = _media_qs(
+        window,
+        campaign__brand_id=brand_id,
+        campaign__source_id=source_id,
+        campaign__campaign_type_id=type_id,
+    )
+    return {
+        (r["campaign_id"], r["ad_group_name"]): r
+        for r in qs.values("campaign_id", "ad_group_name").annotate(
+            spend=Coalesce(Sum("cost"), _Z, output_field=_DF),
+            impressions=Coalesce(Sum("impressions"), 0),
+            clicks=Coalesce(Sum("clicks"), 0),
+            conversions=Coalesce(Sum("conversions"), 0),
+            conv_value=Coalesce(Sum("conversion_value"), _Z, output_field=_DF),
+        )
+    }
+
+
 def orders_by_brand(window, vertical_id=None, rev_type="net"):
     qs = FactOrdersDaily.objects.filter(
         date__date__gte=window.start, date__date__lte=window.end,
@@ -814,6 +834,52 @@ def brand_table(period, vertical_id=None, rev_type="net"):
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+def _build_drill_row(row_id, name, cur, cmp):
+    """Build a single drill-table row from current/comparison media dicts."""
+    cur_spend = float(cur.get("spend", 0))
+    cmp_spend = float(cmp.get("spend", 0))
+    if cur_spend == 0 and cmp_spend == 0:
+        return None
+
+    cur_rev = float(cur.get("conv_value", 0))
+    cmp_rev = float(cmp.get("conv_value", 0))
+
+    cur_mts = _div(cur_spend, cur_rev)
+    cmp_mts = _div(cmp_spend, cmp_rev)
+
+    cur_clicks = int(cur.get("clicks", 0))
+    cmp_clicks = int(cmp.get("clicks", 0))
+    cur_conversions = int(cur.get("conversions", 0))
+    cmp_conversions = int(cmp.get("conversions", 0))
+
+    cur_src_cvr = cur_conversions / cur_clicks if cur_clicks else 0
+    cmp_src_cvr = cmp_conversions / cmp_clicks if cmp_clicks else 0
+
+    cur_avg_cv = cur_rev / cur_conversions if cur_conversions else 0
+    cmp_avg_cv = cmp_rev / cmp_conversions if cmp_conversions else 0
+
+    return {
+        "id": row_id,
+        "name": name,
+        "spend": cur_spend,
+        "spend_delta": _pct(cur_spend, cmp_spend),
+        "revenue": round(cur_rev, 2),
+        "revenue_delta": _pct(cur_rev, cmp_rev),
+        "mts": cur_mts,
+        "mts_delta": (
+            round(cur_mts - cmp_mts, 4)
+            if cur_mts is not None and cmp_mts is not None
+            else None
+        ),
+        "clicks": cur_clicks,
+        "conversions": cur_conversions,
+        "src_cvr": round(cur_src_cvr, 4),
+        "src_cvr_delta": _pct(cur_src_cvr, cmp_src_cvr),
+        "avg_conv_value": round(cur_avg_cv, 2),
+        "avg_conv_value_delta": _pct(cur_avg_cv, cmp_avg_cv),
+    }
+
+
 def drill_table(period, group_by, rev_type="net", **filters):
     brand_id = filters["brand_id"]
 
@@ -827,10 +893,10 @@ def drill_table(period, group_by, rev_type="net", **filters):
         mp = media_by_campaign_type(period.compare, brand_id, filters["source_id"])
         objs = {t.id: t.name for t in DimCampaignType.objects.all()}
     elif group_by == "campaign":
-        mc = media_by_campaign(
+        mc = media_by_ad_group(
             period.current, brand_id, filters["source_id"], filters["type_id"]
         )
-        mp = media_by_campaign(
+        mp = media_by_ad_group(
             period.compare, brand_id, filters["source_id"], filters["type_id"]
         )
         campaign_qs = DimCampaign.objects.filter(
@@ -838,64 +904,26 @@ def drill_table(period, group_by, rev_type="net", **filters):
             source_id=filters["source_id"],
             campaign_type_id=filters["type_id"],
         )
-        objs = {c.id: c.name for c in campaign_qs}
-        ad_groups = {c.id: c.ad_group_name for c in campaign_qs}
+        campaign_names = {c.id: c.name for c in campaign_qs}
+        all_keys = set(mc.keys()) | set(mp.keys())
+        rows = []
+        for key in all_keys:
+            camp_id, ag_name = key
+            name = campaign_names.get(camp_id, f"Campaign {camp_id}")
+            row = _build_drill_row(key, name, mc.get(key, {}), mp.get(key, {}))
+            if row is not None:
+                row["ad_group_name"] = ag_name
+            if row is not None:
+                rows.append(row)
+        return sorted(rows, key=lambda r: r["spend"], reverse=True)
     else:
         return []
 
     rows = []
     for obj_id, name in objs.items():
-        cur = mc.get(obj_id, {})
-        cmp = mp.get(obj_id, {})
-
-        cur_spend = float(cur.get("spend", 0))
-        cmp_spend = float(cmp.get("spend", 0))
-        if cur_spend == 0 and cmp_spend == 0:
-            continue
-
-        # Platform-reported last-click revenue (conversion_value)
-        cur_rev = float(cur.get("conv_value", 0))
-        cmp_rev = float(cmp.get("conv_value", 0))
-
-        cur_mts = _div(cur_spend, cur_rev)
-        cmp_mts = _div(cmp_spend, cmp_rev)
-
-        cur_clicks = int(cur.get("clicks", 0))
-        cmp_clicks = int(cmp.get("clicks", 0))
-        cur_conversions = int(cur.get("conversions", 0))
-        cmp_conversions = int(cmp.get("conversions", 0))
-
-        # Source Conversion Rate = conversions / clicks (0 when clicks = 0)
-        cur_src_cvr = cur_conversions / cur_clicks if cur_clicks else 0
-        cmp_src_cvr = cmp_conversions / cmp_clicks if cmp_clicks else 0
-
-        # Avg Conversion Value = conversion_value / conversions (0 when conversions = 0)
-        cur_avg_cv = cur_rev / cur_conversions if cur_conversions else 0
-        cmp_avg_cv = cmp_rev / cmp_conversions if cmp_conversions else 0
-
-        row = {
-            "id": obj_id,
-            "name": name,
-            "spend": cur_spend,
-            "spend_delta": _pct(cur_spend, cmp_spend),
-            "revenue": round(cur_rev, 2),
-            "revenue_delta": _pct(cur_rev, cmp_rev),
-            "mts": cur_mts,
-            "mts_delta": (
-                round(cur_mts - cmp_mts, 4)
-                if cur_mts is not None and cmp_mts is not None
-                else None
-            ),
-            "clicks": cur_clicks,
-            "conversions": cur_conversions,
-            "src_cvr": round(cur_src_cvr, 4),
-            "src_cvr_delta": _pct(cur_src_cvr, cmp_src_cvr),
-            "avg_conv_value": round(cur_avg_cv, 2),
-            "avg_conv_value_delta": _pct(cur_avg_cv, cmp_avg_cv),
-        }
-        if group_by == "campaign":
-            row["ad_group_name"] = ad_groups.get(obj_id, "")
-        rows.append(row)
+        row = _build_drill_row(obj_id, name, mc.get(obj_id, {}), mp.get(obj_id, {}))
+        if row is not None:
+            rows.append(row)
 
     return sorted(rows, key=lambda r: r["spend"], reverse=True)
 

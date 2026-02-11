@@ -180,7 +180,7 @@ class DimCampaign(models.Model):
 
 
 class FactMediaDaily(models.Model):
-    """Grain: campaign × day.  Source: Google Ads / Bing Ads API or CSV export."""
+    """Grain: campaign × day × ad_group.  Source: Google Ads / Bing Ads API or CSV export."""
 
     campaign = models.ForeignKey(
         DimCampaign, on_delete=models.CASCADE, related_name="media"
@@ -188,6 +188,7 @@ class FactMediaDaily(models.Model):
     date = models.ForeignKey(
         DimDate, on_delete=models.PROTECT, related_name="media"
     )
+    ad_group_name = models.CharField(max_length=300, blank=True, default="")
     impressions = models.IntegerField(default=0)
     impression_share = models.DecimalField(
         max_digits=5, decimal_places=4, null=True, blank=True,
@@ -204,8 +205,8 @@ class FactMediaDaily(models.Model):
     )
 
     class Meta:
-        unique_together = ["campaign", "date"]
-        indexes = [models.Index(fields=["date", "campaign"])]
+        unique_together = ["campaign", "date", "ad_group_name"]
+        indexes = [models.Index(fields=["date", "campaign", "ad_group_name"])]
 
     def __str__(self):
         return f"{self.campaign} | {self.date}"

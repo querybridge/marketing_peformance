@@ -96,6 +96,38 @@
         </div>
         {% endif %}
       </div>
+      <div class="ui mini statistics" style="margin:0.5em 0">
+        <div class="statistic">
+          <div class="value">${{ summary.csv_new_total|floatformat:2 }}</div>
+          <div class="label">CSV NewSales Total</div>
+        </div>
+        <div class="statistic">
+          <div class="value">${{ summary.written_new|floatformat:2 }}</div>
+          <div class="label">Written NewSales</div>
+        </div>
+        {% if summary.skipped_new %}
+        <div class="statistic">
+          <div class="value" style="color:#db2828">${{ summary.skipped_new|floatformat:2 }}</div>
+          <div class="label">Skipped NewSales</div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="ui mini statistics" style="margin:0.5em 0">
+        <div class="statistic">
+          <div class="value">${{ summary.csv_net_total|floatformat:2 }}</div>
+          <div class="label">CSV Net Sales Total</div>
+        </div>
+        <div class="statistic">
+          <div class="value">${{ summary.written_net|floatformat:2 }}</div>
+          <div class="label">Written Net Sales</div>
+        </div>
+        {% if summary.skipped_net %}
+        <div class="statistic">
+          <div class="value" style="color:#db2828">${{ summary.skipped_net|floatformat:2 }}</div>
+          <div class="label">Skipped Net Sales</div>
+        </div>
+        {% endif %}
+      </div>
     </div>
 
     {% if summary.errors %}

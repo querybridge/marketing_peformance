@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import re
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -1505,7 +1506,8 @@ def upload_csv(request):
     matched_by_campaign = 0
     matched_by_ad_group = 0
     matched_unknown = 0
-    pending_rows = {}  # (campaign_id, date_id) → aggregated metrics
+    pending_rows = {}  # (campaign_id, date_id, ad_group_name) → aggregated metrics
+    has_ad_group_col = "ad_group" in col_idx
     errors = []
 
     def _cell(row, field):
@@ -1661,7 +1663,7 @@ def upload_csv(request):
         impression_share = _parse_share(_cell(row, "impression_share"))
         click_share = _parse_share(_cell(row, "click_share"))
 
-        key = (campaign.id, dim_date.id)
+        key = (campaign.id, dim_date.id, ad_group_name)
         if key in pending_rows:
             agg = pending_rows[key]
             agg["impressions"] += impressions
@@ -1678,6 +1680,7 @@ def upload_csv(request):
             pending_rows[key] = {
                 "campaign": campaign,
                 "date": dim_date,
+                "ad_group_name": ad_group_name,
                 "impressions": impressions,
                 "clicks": clicks,
                 "cost": cost,
@@ -1693,6 +1696,7 @@ def upload_csv(request):
         _, is_created = FactMediaDaily.objects.update_or_create(
             campaign=agg["campaign"],
             date=agg["date"],
+            ad_group_name=agg["ad_group_name"],
             defaults={
                 "impressions": agg["impressions"],
                 "clicks": agg["clicks"],
@@ -1708,6 +1712,17 @@ def upload_csv(request):
         else:
             updated += 1
 
+    # Clean up stale campaign-level rows superseded by ad-group-level rows
+    camp_dates_with_ag = defaultdict(set)
+    for agg in pending_rows.values():
+        if agg["ad_group_name"]:
+            camp_dates_with_ag[agg["campaign"].id].add(agg["date"].id)
+    for camp_id, date_ids in camp_dates_with_ag.items():
+        FactMediaDaily.objects.filter(
+            campaign_id=camp_id, date_id__in=date_ids, ad_group_name="",
+        ).delete()
+
+    ad_group_rows = sum(1 for a in pending_rows.values() if a["ad_group_name"])
     ctx["summary"] = {
         "created": created,
         "updated": updated,
@@ -1719,6 +1734,8 @@ def upload_csv(request):
         "errors": errors,
         "total": created + updated,
         "metadata_rows_skipped": metadata_rows_skipped,
+        "has_ad_group_col": has_ad_group_col,
+        "ad_group_rows": ad_group_rows,
     }
     return render(request, "dashboard/upload.html", ctx)
 
@@ -2003,10 +2020,13 @@ def upload_revenue(request):
                             if b.vertical_id:
                                 brand_cache[(b.vertical_id, b.brand_id)] = b
 
-                        # ── Process rows ──
-                        created = 0
-                        updated = 0
+                        # ── Aggregate rows by (brand, date) before writing ──
+                        pending = {}   # (brand_id, date) -> {brand, orders, net, new}
                         skipped = 0
+                        csv_new_total = sum(r["new_revenue"] for r in rows_data)
+                        csv_net_total = sum(r["net_revenue"] for r in rows_data)
+                        skipped_new_revenue = Decimal("0")
+                        skipped_net_revenue = Decimal("0")
 
                         for r in rows_data:
                             vertical = site_lookup[r["site_id"]]
@@ -2015,6 +2035,8 @@ def upload_revenue(request):
                             brand = brand_cache.get(cache_key)
                             if not brand:
                                 unknown_mfg_ids.add(r["mfg_id"])
+                                skipped_new_revenue += r["new_revenue"]
+                                skipped_net_revenue += r["net_revenue"]
                                 continue
 
                             dim_date = DimDate.objects.filter(date=r["date"]).first()
@@ -2025,13 +2047,32 @@ def upload_revenue(request):
                                 skipped += 1
                                 continue
 
-                            _, is_new = FactOrdersDaily.objects.update_or_create(
-                                brand=brand,
-                                date=dim_date,
-                                defaults={
+                            agg_key = (brand.id, dim_date.id)
+                            if agg_key in pending:
+                                pending[agg_key]["orders"] += r["orders"]
+                                pending[agg_key]["net_revenue"] += r["net_revenue"]
+                                pending[agg_key]["new_revenue"] += r["new_revenue"]
+                            else:
+                                pending[agg_key] = {
+                                    "brand": brand,
+                                    "dim_date": dim_date,
                                     "orders": r["orders"],
                                     "net_revenue": r["net_revenue"],
                                     "new_revenue": r["new_revenue"],
+                                }
+
+                        # ── Write aggregated rows to DB ──
+                        created = 0
+                        updated = 0
+
+                        for agg in pending.values():
+                            _, is_new = FactOrdersDaily.objects.update_or_create(
+                                brand=agg["brand"],
+                                date=agg["dim_date"],
+                                defaults={
+                                    "orders": agg["orders"],
+                                    "net_revenue": agg["net_revenue"],
+                                    "new_revenue": agg["new_revenue"],
                                 },
                             )
                             if is_new:
@@ -2045,12 +2086,20 @@ def upload_revenue(request):
                                 f"{', '.join(str(m) for m in sorted(unknown_mfg_ids))}"
                             )
 
+                        written_new = sum(a["new_revenue"] for a in pending.values())
+                        written_net = sum(a["net_revenue"] for a in pending.values())
                         summary = {
                             "total": len(rows_data),
                             "created": created,
                             "updated": updated,
                             "skipped": skipped + len([r for r in rows_data if (site_lookup[r["site_id"]].id, r["mfg_id"]) not in brand_cache]),
                             "errors": row_errors,
+                            "csv_new_total": csv_new_total,
+                            "csv_net_total": csv_net_total,
+                            "written_new": written_new,
+                            "written_net": written_net,
+                            "skipped_new": skipped_new_revenue,
+                            "skipped_net": skipped_net_revenue,
                         }
 
     return render(request, "dashboard/upload_revenue.html", {
