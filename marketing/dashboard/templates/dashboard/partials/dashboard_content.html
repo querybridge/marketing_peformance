@@ -91,7 +91,12 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em">
     <h3 class="ui header" style="margin:0">Brand Performance</h3>
     <div class="ui small icon input" style="width:220px">
-      <input type="text" id="brand-filter" placeholder="Filter by brand…">
+      <input type="text" id="brand-filter" name="brand_q" placeholder="Filter by brand…"
+             value="{{ brand_q }}"
+             form="filter-form"
+             hx-get="/" hx-target="#dashboard-content" hx-push-url="true"
+             hx-trigger="keyup changed delay:300ms"
+             hx-include="#filter-form">
       <i class="search icon"></i>
     </div>
   </div>
@@ -241,14 +246,13 @@ function toggleDrill(id, url) {
 }
 </script>
 
-<!-- ── Table Sort & Filter ──────────────────────────────────── -->
+<!-- ── Table Sort ──────────────────────────────────────────── -->
 <script>
 (function() {
   var table = document.getElementById('brand-table');
   if (!table) return;
   var tbody = table.tBodies[0];
   var headers = table.querySelectorAll('th.sortable-col');
-  var filterInput = document.getElementById('brand-filter');
   var currentCol = null;
   var ascending = true;
 
@@ -306,21 +310,6 @@ function toggleDrill(id, url) {
     });
   });
 
-  // ── Filter ──
-  if (filterInput) {
-    filterInput.addEventListener('input', function() {
-      var q = this.value.toLowerCase();
-      var pairs = getRowPairs();
-      for (var i = 0; i < pairs.length; i++) {
-        var name = pairs[i].brand.getAttribute('data-brand-name') || '';
-        var show = !q || name.indexOf(q) !== -1;
-        pairs[i].brand.style.display = show ? '' : 'none';
-        if (pairs[i].drill) {
-          if (!show) pairs[i].drill.style.display = 'none';
-        }
-      }
-    });
-  }
 })();
 </script>
 

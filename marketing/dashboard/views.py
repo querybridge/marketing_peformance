@@ -90,6 +90,14 @@ def index(request):
     if bid:
         all_brand_rows = [r for r in all_brand_rows if r["id"] == bid]
 
+    # Brand search — filter across ALL pages before pagination
+    brand_q = (request.GET.get("brand_q") or "").strip().lower()
+    if brand_q:
+        all_brand_rows = [
+            r for r in all_brand_rows
+            if brand_q in r["name"].lower()
+        ]
+
     exceptions = services.exceptions_summary(all_brand_rows)
     trend = services.daily_trend(
         period, vid, rev, preset=p["preset"], brand_id=bid,
@@ -131,6 +139,7 @@ def index(request):
         "comparisons": services.CMP_CHOICES,
         "brand_rows": page_obj,
         "page_obj": page_obj,
+        "brand_q": brand_q,
         "exceptions": exceptions,
         "alert_meta": services.ALERT_META,
         "trend_json": json.dumps(trend),
