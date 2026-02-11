@@ -18,7 +18,7 @@
 <div class="ui three column stackable grid">
   <div class="column">
     <div class="ui segment">
-      <h4 class="ui header">Daily Revenue</h4>
+      <h4 class="ui header">Daily {% if rev_type == "new" %}New {% elif rev_type == "platform" %}Platform {% else %}Net {% endif %}Revenue</h4>
       <div id="chart-revenue" style="width:100%;height:280px"></div>
     </div>
   </div>
@@ -113,7 +113,7 @@
         <th>Brand</th>
         <th class="right aligned sortable-col" data-sort-col="2">Spend <span class="sort-icon"></span></th>
         <th class="right aligned sortable-col" data-sort-col="3">Spend &Delta; <span class="sort-icon"></span></th>
-        <th class="right aligned sortable-col" data-sort-col="4">Revenue <span class="sort-icon"></span></th>
+        <th class="right aligned sortable-col" data-sort-col="4">{% if rev_type == "new" %}New Rev{% elif rev_type == "platform" %}Plat Rev{% else %}Net Rev{% endif %} <span class="sort-icon"></span></th>
         <th class="right aligned sortable-col" data-sort-col="5">Rev &Delta; <span class="sort-icon"></span></th>
         <th class="right aligned sortable-col" data-sort-col="6">MTS <span class="sort-icon"></span></th>
         <th class="right aligned sortable-col" data-sort-col="7">MTS &Delta; <span class="sort-icon"></span></th>
