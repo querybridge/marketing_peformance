@@ -35,6 +35,7 @@ urlpatterns = [
     path("optimization/", views.weekly_optimization, name="optimization"),
     path("optimization/export/", views.export_optimization_xlsx, name="optimization_export"),
     path("scoring/", views.scoring_config, name="scoring_config"),
+    path("users/", views.add_user, name="add_user"),
     path("weekly-report/", views.weekly_report, name="weekly_report"),
     path("weekly-report/export/", views.export_weekly_report, name="weekly_report_export"),
 ]

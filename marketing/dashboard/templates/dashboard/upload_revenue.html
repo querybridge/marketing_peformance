@@ -144,6 +144,9 @@
     {% endif %}
     {% endif %}
 
+    {% if request.access_level == "read_only" %}
+    <div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+    {% else %}
     <form class="ui form segment" method="post" enctype="multipart/form-data">
       {% csrf_token %}
 
@@ -156,6 +159,7 @@
         <i class="upload icon"></i> Upload &amp; Import
       </button>
     </form>
+    {% endif %}
 
   </div>
 </div>

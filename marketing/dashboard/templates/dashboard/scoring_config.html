@@ -9,6 +9,10 @@
   <div class="sub header">Adjust the weights and windows used by the optimization scoring engine</div>
 </h2>
 
+{% if request.access_level == "read_only" %}
+<div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+{% endif %}
+
 {% if saved %}
 <div class="ui success message">
   <i class="check circle icon"></i>
@@ -61,7 +65,9 @@
     <small style="color:#6B7D94">Campaigns below this click count use peer CVR instead of own CVR.</small>
   </div>
 
+  {% if request.access_level != "read_only" %}
   <button class="ui primary button" type="submit" style="margin-top:1em">Save Configuration</button>
+  {% endif %}
 </form>
 
 <div class="ui divider" style="margin-top:2em"></div>

@@ -19,24 +19,58 @@
         <img src="{% static 'img/logo.avif' %}" alt="Logo" style="width:80px;height:auto;margin-right:0.6em;object-fit:contain">
         Paid Marketing Performance
       </a>
+      {% if nav_perms.index != "no_access" %}
       <a class="item" href="{% url 'dashboard:index' %}">Overview</a>
+      {% endif %}
+      {% if nav_perms.budgets != "no_access" %}
       <a class="item" href="{% url 'dashboard:budgets' %}">Budgets</a>
+      {% endif %}
+      {% if nav_perms.upload_csv != "no_access" %}
       <a class="item" href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>
+      {% endif %}
+      {% if nav_perms.upload_revenue != "no_access" %}
       <a class="item" href="{% url 'dashboard:upload_revenue' %}">Revenue Data</a>
+      {% endif %}
+      {% if nav_perms.optimization != "no_access" %}
       <div class="ui simple dropdown item">
         Weekly Performance <i class="dropdown icon"></i>
         <div class="menu">
           <a class="item" href="{% url 'dashboard:optimization' %}">Weekly Optimization</a>
+          {% if nav_perms.weekly_report != "no_access" %}
           <a class="item" href="{% url 'dashboard:weekly_report' %}">Weekly Report</a>
+          {% endif %}
         </div>
       </div>
+      {% endif %}
       <div class="right menu">
+        {% if nav_perms.help != "no_access" %}
         <a class="item" href="{% url 'dashboard:help' %}">
           <i class="help circle icon"></i> Help
         </a>
+        {% endif %}
+        {% if nav_perms.export_pdf != "no_access" %}
         <a class="item" id="pdf-link" href="{% url 'dashboard:export_pdf' %}?{{ filter_qs|default:'' }}">
           <i class="file pdf outline icon"></i> PDF
         </a>
+        {% endif %}
+        {% if user.is_authenticated %}
+        <div style="flex:1"></div>
+        <div class="ui simple dropdown item" style="color:#9BAFC4;margin-left:auto">
+          <i class="user icon"></i> {{ user_display_name }}
+          <i class="dropdown icon"></i>
+          <div class="menu" style="right:0;left:auto">
+            <a class="item" href="{% url 'password_change' %}">
+              <i class="key icon"></i> Change Password
+            </a>
+            <form method="post" action="{% url 'logout' %}" style="margin:0">
+              {% csrf_token %}
+              <button type="submit" class="item" style="background:none;border:none;cursor:pointer;color:inherit;font:inherit;width:100%;text-align:left;padding:0.78em 1.14em">
+                <i class="sign out icon"></i> Logout
+              </button>
+            </form>
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -47,14 +81,33 @@
 
   <footer class="ui inverted vertical segment" style="background:#313E4F;padding:1.5em 0;margin-top:auto">
     <div class="ui container" style="text-align:center">
+      {% if nav_perms.verticals != "no_access" %}
       <a href="{% url 'dashboard:verticals' %}" style="color:#9BAFC4;margin:0 1em">Verticals</a>
+      {% endif %}
+      {% if nav_perms.brands != "no_access" %}
       <a href="{% url 'dashboard:brands' %}" style="color:#9BAFC4;margin:0 1em">Brands</a>
+      {% endif %}
+      {% if nav_perms.data_dictionary != "no_access" %}
       <a href="{% url 'dashboard:data_dictionary' %}" style="color:#9BAFC4;margin:0 1em">Data Dictionary</a>
+      {% endif %}
+      {% if nav_perms.alert_spec != "no_access" %}
       <a href="{% url 'dashboard:alert_spec' %}" style="color:#9BAFC4;margin:0 1em">Alert Rules</a>
+      {% endif %}
+      {% if nav_perms.match_campaigns != "no_access" %}
       <a href="{% url 'dashboard:match_campaigns' %}" style="color:#9BAFC4;margin:0 1em">Match Campaigns</a>
+      {% endif %}
+      {% if nav_perms.upload_site_mapping != "no_access" %}
       <a href="{% url 'dashboard:upload_site_mapping' %}" style="color:#9BAFC4;margin:0 1em">Site ID Mapping</a>
+      {% endif %}
+      {% if nav_perms.scoring_config != "no_access" %}
       <a href="{% url 'dashboard:scoring_config' %}" style="color:#9BAFC4;margin:0 1em">Scoring</a>
+      {% endif %}
+      {% if nav_perms.help != "no_access" %}
       <a href="{% url 'dashboard:help' %}" style="color:#9BAFC4;margin:0 1em">Help</a>
+      {% endif %}
+      {% if nav_perms.add_user != "no_access" %}
+      <a href="{% url 'dashboard:add_user' %}" style="color:#9BAFC4;margin:0 1em">Users</a>
+      {% endif %}
     </div>
   </footer>
 

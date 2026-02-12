@@ -260,9 +260,11 @@
   <!-- ACTION BAR                                                      -->
   <!-- ════════════════════════════════════════════════════════════════ -->
   <div class="ui segment" style="margin-top:2em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+    {% if request.access_level != "read_only" %}
     <button type="submit" class="ui primary button">
       <i class="save icon"></i> Save Draft
     </button>
+    {% endif %}
     <a class="ui button" href="{% url 'dashboard:weekly_report_export' %}?vertical={{ selected_vertical_id }}&week_ending={{ week_ending_str }}">
       <i class="file word icon"></i> Download Word Doc
     </a>
