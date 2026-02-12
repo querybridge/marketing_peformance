@@ -23,7 +23,13 @@
       <a class="item" href="{% url 'dashboard:budgets' %}">Budgets</a>
       <a class="item" href="{% url 'dashboard:upload_csv' %}">Campaign Data</a>
       <a class="item" href="{% url 'dashboard:upload_revenue' %}">Revenue Data</a>
-      <a class="item" href="{% url 'dashboard:optimization' %}">Weekly Optimization</a>
+      <div class="ui simple dropdown item">
+        Weekly Performance <i class="dropdown icon"></i>
+        <div class="menu">
+          <a class="item" href="{% url 'dashboard:optimization' %}">Weekly Optimization</a>
+          <a class="item" href="{% url 'dashboard:weekly_report' %}">Weekly Report</a>
+        </div>
+      </div>
       <div class="right menu">
         <a class="item" href="{% url 'dashboard:help' %}">
           <i class="help circle icon"></i> Help

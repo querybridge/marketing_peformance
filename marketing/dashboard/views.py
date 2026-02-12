@@ -15,7 +15,7 @@ from django.db.models import Sum
 from .models import (
     DimBrand, DimCampaign, DimCampaignType, DimDate, DimSite, DimSource,
     DimVertical, FactBudget, FactMediaDaily, FactOrdersDaily,
-    FactVerticalBudget, ScoringConfig,
+    FactVerticalBudget, ScoringConfig, WeeklyReport,
 )
 
 
@@ -2444,3 +2444,129 @@ def scoring_config(request):
         "error": error,
         "saved": saved,
     })
+
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Weekly Report
+# ───────────────────────────────────────────────────────────────────────────
+
+def weekly_report(request):
+    from datetime import timedelta
+    from .report_services import last_week_window, week_window_for_date, build_report_data
+
+    verticals = DimVertical.objects.all()
+    vertical_id = request.GET.get("vertical") or request.POST.get("vertical")
+    week_ending = request.GET.get("week_ending") or request.POST.get("week_ending")
+
+    selected_vertical = None
+    report = None
+    report_data = None
+    saved = False
+    last_saved = None
+
+    # Default week ending = last Sunday
+    default_monday, default_sunday = last_week_window()
+    if not week_ending:
+        week_end = default_sunday
+        week_start = default_monday
+    else:
+        week_end = date.fromisoformat(week_ending)
+        week_start, week_end = week_window_for_date(week_end)
+
+    if vertical_id:
+        vertical_id = int(vertical_id)
+        selected_vertical = DimVertical.objects.filter(id=vertical_id).first()
+
+    if request.method == "POST" and selected_vertical:
+        # Save draft
+        report, _ = WeeklyReport.objects.update_or_create(
+            vertical_id=vertical_id,
+            week_start=week_start,
+            defaults={
+                "week_end": week_end,
+                "summary_statement": request.POST.get("summary_statement", ""),
+                "major_yoy_shifts": request.POST.get("major_yoy_shifts", ""),
+                "whats_working_well": request.POST.get("whats_working_well", ""),
+                "whats_needs_attention": request.POST.get("whats_needs_attention", ""),
+                "what_were_doing": request.POST.get("what_were_doing", ""),
+                "platform_testing": request.POST.get("platform_testing", ""),
+                "channel_mix_observations": request.POST.get("channel_mix_observations", ""),
+                "risk_opportunity_outlook": request.POST.get("risk_opportunity_outlook", ""),
+                "gm_discussion_points": request.POST.get("gm_discussion_points", ""),
+                "brand_notes": {
+                    k.replace("brand_note_", ""): v
+                    for k, v in request.POST.items()
+                    if k.startswith("brand_note_") and v.strip()
+                },
+            },
+        )
+        saved = True
+
+    if selected_vertical:
+        # Load existing draft
+        if not report:
+            report = WeeklyReport.objects.filter(
+                vertical_id=vertical_id, week_start=week_start,
+            ).first()
+        if report:
+            last_saved = report.updated_at
+
+        report_data = build_report_data(vertical_id, week_start, week_end)
+
+    brand_notes_json = json.dumps(report.brand_notes) if report and report.brand_notes else "{}"
+
+    ctx = {
+        "verticals": verticals,
+        "selected_vertical": selected_vertical,
+        "selected_vertical_id": vertical_id,
+        "week_start": week_start,
+        "week_end": week_end,
+        "week_ending_str": week_end.isoformat(),
+        "report": report,
+        "report_data": report_data,
+        "saved": saved,
+        "last_saved": last_saved,
+        "brand_notes_json": brand_notes_json,
+    }
+    return render(request, "dashboard/weekly_report.html", ctx)
+
+
+def export_weekly_report(request):
+    from datetime import timedelta
+    from .report_services import week_window_for_date, build_report_data
+    from .report_export import build_weekly_report_docx
+
+    vertical_id = request.GET.get("vertical")
+    week_ending = request.GET.get("week_ending")
+
+    if not vertical_id or not week_ending:
+        return HttpResponse("vertical and week_ending parameters required", status=400)
+
+    vertical_id = int(vertical_id)
+    week_end = date.fromisoformat(week_ending)
+    week_start, week_end = week_window_for_date(week_end)
+
+    vertical = get_object_or_404(DimVertical, id=vertical_id)
+    report = WeeklyReport.objects.filter(
+        vertical_id=vertical_id, week_start=week_start,
+    ).first()
+
+    data = build_report_data(vertical_id, week_start, week_end)
+
+    docx_bytes = build_weekly_report_docx(
+        vertical_name=vertical.name,
+        week_start=week_start,
+        week_end=week_end,
+        snapshot=data["snapshot"],
+        brand_rows=data["brand_rows"],
+        report=report,
+    )
+
+    filename = f"weekly-report-{vertical.slug}-{week_end.isoformat()}.docx"
+    response = HttpResponse(
+        docx_bytes,
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response

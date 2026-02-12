@@ -314,3 +314,34 @@ class ScoringConfig(models.Model):
 
     def __str__(self):
         return f"ScoringConfig (A={self.weight_a} B={self.weight_b} C={self.weight_c})"
+
+
+class WeeklyReport(models.Model):
+    """Draft weekly report — one per vertical per week."""
+
+    vertical = models.ForeignKey(
+        DimVertical, on_delete=models.CASCADE, related_name="weekly_reports",
+    )
+    week_start = models.DateField()
+    week_end = models.DateField()
+
+    summary_statement = models.TextField(blank=True, default="")
+    major_yoy_shifts = models.TextField(blank=True, default="")
+    whats_working_well = models.TextField(blank=True, default="")
+    whats_needs_attention = models.TextField(blank=True, default="")
+    what_were_doing = models.TextField(blank=True, default="")
+    platform_testing = models.TextField(blank=True, default="")
+    channel_mix_observations = models.TextField(blank=True, default="")
+    risk_opportunity_outlook = models.TextField(blank=True, default="")
+    gm_discussion_points = models.TextField(blank=True, default="")
+    brand_notes = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["vertical", "week_start"]
+        ordering = ["-week_start"]
+
+    def __str__(self):
+        return f"{self.vertical} — {self.week_start} to {self.week_end}"

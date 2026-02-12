@@ -1,0 +1,299 @@
+{% extends "dashboard/base.html" %}
+{% load dashboard_filters %}
+
+{% block title %}Weekly Report{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">
+  Weekly Report
+  <div class="sub header">Structured weekly performance summary with auto-filled metrics</div>
+</h2>
+
+<!-- ── Filter Bar ────────────────────────────────────────────── -->
+<form method="get" action="{% url 'dashboard:weekly_report' %}" class="ui form" style="margin-bottom:1.5em">
+  <div class="fields">
+    <div class="five wide field">
+      <label>Vertical</label>
+      <select name="vertical" class="ui dropdown" required>
+        <option value="">Select Vertical...</option>
+        {% for v in verticals %}
+        <option value="{{ v.id }}" {% if selected_vertical_id == v.id %}selected{% endif %}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="four wide field">
+      <label>Week Ending (Sunday)</label>
+      <input type="date" name="week_ending" value="{{ week_ending_str }}">
+    </div>
+    <div class="three wide field" style="display:flex;align-items:flex-end">
+      <button class="ui primary button" type="submit">Load</button>
+    </div>
+  </div>
+</form>
+
+{% if saved %}
+<div class="ui success message">
+  <i class="check circle icon"></i> Draft saved successfully.
+</div>
+{% endif %}
+
+{% if selected_vertical and report_data %}
+
+<div class="ui segment" style="background:#f0f4f8;margin-bottom:1.5em">
+  <h3 class="ui header" style="margin:0">
+    {{ selected_vertical.name }} — {{ week_start|date:"M d" }}–{{ week_end|date:"M d, Y" }}
+  </h3>
+  {% if last_saved %}
+  <span style="color:#6B7D94;font-size:0.85em">Last saved: {{ last_saved|date:"M d, Y g:i A" }}</span>
+  {% endif %}
+</div>
+
+<form method="post" action="{% url 'dashboard:weekly_report' %}" class="ui form">
+  {% csrf_token %}
+  <input type="hidden" name="vertical" value="{{ selected_vertical_id }}">
+  <input type="hidden" name="week_ending" value="{{ week_ending_str }}">
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- EXECUTIVE SNAPSHOT — Stephen Few scorecards                    -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h3 class="ui dividing header">Executive Snapshot</h3>
+  <div class="scorecard-row">
+
+    <!-- ── Revenue ──────────────────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Revenue</div>
+      <div class="scorecard-value">${{ report_data.snapshot.revenue|floatformat:0|intcomma }}</div>
+      <div class="scorecard-comparisons">
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">WoW</span>
+          {% if report_data.snapshot.rev_wow_pct != None %}
+            {% if report_data.snapshot.rev_wow_pct >= 0 %}
+              <span class="scorecard-delta delta-up">▲&nbsp;{{ report_data.snapshot.rev_wow_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta delta-down">▼&nbsp;{{ report_data.snapshot.rev_wow_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">—</span>{% endif %}
+        </div>
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">YoY</span>
+          {% if report_data.snapshot.rev_yoy_pct != None %}
+            {% if report_data.snapshot.rev_yoy_pct >= 0 %}
+              <span class="scorecard-delta delta-up">▲&nbsp;{{ report_data.snapshot.rev_yoy_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta delta-down">▼&nbsp;{{ report_data.snapshot.rev_yoy_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">—</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Spend ────────────────────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Spend</div>
+      <div class="scorecard-value">${{ report_data.snapshot.spend|floatformat:0|intcomma }}</div>
+      <div class="scorecard-comparisons">
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">WoW</span>
+          {% if report_data.snapshot.spend_wow_pct != None %}
+            {% if report_data.snapshot.spend_wow_pct >= 0 %}
+              <span class="scorecard-delta" style="color:#6B7D94">▲&nbsp;{{ report_data.snapshot.spend_wow_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta" style="color:#6B7D94">▼&nbsp;{{ report_data.snapshot.spend_wow_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">—</span>{% endif %}
+        </div>
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">YoY</span>
+          {% if report_data.snapshot.spend_yoy_pct != None %}
+            {% if report_data.snapshot.spend_yoy_pct >= 0 %}
+              <span class="scorecard-delta" style="color:#6B7D94">▲&nbsp;{{ report_data.snapshot.spend_yoy_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta" style="color:#6B7D94">▼&nbsp;{{ report_data.snapshot.spend_yoy_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">—</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MTS (bullet graph: actual vs goal) ───────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">MTS</div>
+      <div class="scorecard-value">{% if report_data.snapshot.mts_pct != None %}{{ report_data.snapshot.mts_pct|floatformat:1 }}%{% else %}—{% endif %}</div>
+      {% if report_data.snapshot.mts_pct != None %}
+      <div class="scorecard-bullet">
+        <div class="scorecard-bullet-fill {% if report_data.snapshot.mts_status == 'on_target' %}on-target{% elif report_data.snapshot.mts_status == 'warning' %}warning{% else %}off-target{% endif %}"
+             style="width:{{ report_data.snapshot.mts_bullet_pct }}%"></div>
+        {% if report_data.snapshot.mts_goal_bullet_pct != None %}
+        <div class="scorecard-bullet-marker" style="left:{{ report_data.snapshot.mts_goal_bullet_pct }}%"></div>
+        {% endif %}
+      </div>
+      <div class="scorecard-target-row">
+        <span>Goal: {% if report_data.snapshot.mts_goal_pct != None %}{{ report_data.snapshot.mts_goal_pct|floatformat:1 }}%{% else %}—{% endif %}</span>
+        {% if report_data.snapshot.mts_status == "on_target" %}
+          <span class="scorecard-status-ok">On Target</span>
+        {% elif report_data.snapshot.mts_status == "warning" %}
+          <span class="scorecard-status-caution">Near Target</span>
+        {% elif report_data.snapshot.mts_status == "off_target" %}
+          <span class="scorecard-status-warn">Off Target</span>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="scorecard-target-row" style="margin-top:0.5em">
+        <span>Goal: {% if report_data.snapshot.mts_goal_pct != None %}{{ report_data.snapshot.mts_goal_pct|floatformat:1 }}%{% else %}—{% endif %}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- ── Top Revenue Driver ───────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Top Revenue Driver</div>
+      <div class="scorecard-value scorecard-value-text">{{ report_data.snapshot.top_driver }}</div>
+      <div style="font-size:0.82em;color:#6B7D94;font-weight:700;margin-top:0.3em">
+        ${{ report_data.snapshot.top_driver_revenue|floatformat:0|intcomma }}
+      </div>
+    </div>
+
+    <!-- ── Largest YoY Shift ────────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Largest YoY Shift</div>
+      <div class="scorecard-value scorecard-value-text">{{ report_data.snapshot.largest_yoy_shift_name }}</div>
+      <div style="font-size:0.82em;font-weight:700;margin-top:0.3em" class="{% if report_data.snapshot.largest_yoy_shift_delta >= 0 %}delta-up{% else %}delta-down{% endif %}">
+        {% if report_data.snapshot.largest_yoy_shift_delta >= 0 %}+{% endif %}${{ report_data.snapshot.largest_yoy_shift_delta|floatformat:0|intcomma }}
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- PERFORMANCE BY MFG TABLE                                        -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h3 class="ui dividing header">Performance by MFG</h3>
+  {% if report_data.brand_rows %}
+  <table class="ui compact celled striped table">
+    <thead>
+      <tr>
+        <th>Brand (MFG)</th>
+        <th class="right aligned">Rev WoW %</th>
+        <th class="right aligned">Rev YoY %</th>
+        <th class="right aligned">Spend YoY %</th>
+        <th class="right aligned">MTS</th>
+        <th>Status</th>
+        <th style="min-width:200px">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in report_data.brand_rows %}
+      <tr>
+        <td><strong>{{ row.name }}</strong></td>
+        <td class="right aligned">{% if row.rev_wow_pct != None %}{{ row.rev_wow_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
+        <td class="right aligned">{% if row.rev_yoy_pct != None %}{{ row.rev_yoy_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
+        <td class="right aligned">{% if row.spend_yoy_pct != None %}{{ row.spend_yoy_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
+        <td class="right aligned">{% if row.mts_pct != None %}{{ row.mts_pct|floatformat:1 }}%{% else %}—{% endif %}</td>
+        <td>
+          {% for badge in row.alert_badges %}
+          <span class="ui mini {{ badge.color }} label"><i class="{{ badge.icon }} icon"></i> {{ badge.label }}</span>
+          {% empty %}
+          <span style="color:#999">—</span>
+          {% endfor %}
+        </td>
+        <td>
+          <textarea name="brand_note_{{ row.id }}" rows="2" style="width:100%;font-size:0.9em" placeholder="Notes for {{ row.name }}..."></textarea>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="ui message"><i class="info circle icon"></i> No brand data available for this period.</div>
+  {% endif %}
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- COMMENTARY SECTIONS                                             -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h3 class="ui dividing header" style="margin-top:2em">Summary Statement</h3>
+  <div class="field">
+    <textarea name="summary_statement" rows="4" placeholder="Overall performance summary (3-4 sentences). Example: This week revenue grew 12% WoW driven by strong performance in Brand X. Spend efficiency remained within MTS targets. We saw continued YoY growth across top brands while managing cost discipline.">{{ report.summary_statement|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">Major YoY Shifts</h3>
+  <div class="field">
+    <textarea name="major_yoy_shifts" rows="4" placeholder="Key year-over-year changes. Example:&#10;- Brand A revenue up $45K YoY (+22%) due to expanded Shopping campaigns&#10;- Brand B down $18K YoY (-15%) due to competitor entry in Non-Brand&#10;- Overall vertical MTS improved 30 bps vs same week LY">{{ report.major_yoy_shifts|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">What's Working Well</h3>
+  <div class="field">
+    <textarea name="whats_working_well" rows="4" placeholder="Highlight wins and positive trends. Example:&#10;- Shopping campaigns for Brand X delivering 2.1x ROAS above target&#10;- New audience segments on Meta driving 18% lower CPA&#10;- Brand D Non-Brand scaling efficiently with MTS at 22%">{{ report.whats_working_well|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">What Needs Attention</h3>
+  <div class="field">
+    <textarea name="whats_needs_attention" rows="4" placeholder="Flag issues and underperformance. Example:&#10;- Brand C Bing Ads CVR dropped 30% WoW — investigating landing page issues&#10;- Brand E approaching monthly budget cap with 10 days remaining&#10;- Amazon Sponsored Ads ACOS rising across multiple brands">{{ report.whats_needs_attention|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">What We're Doing About It</h3>
+  <div class="field">
+    <textarea name="what_were_doing" rows="4" placeholder="Actions being taken. Example:&#10;- Pausing underperforming ad groups in Brand C Bing campaigns&#10;- Requesting budget increase for Brand E to capture remaining demand&#10;- Reducing Amazon bids on high-ACOS keywords and shifting to Sponsored Brands">{{ report.what_were_doing|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">Platform Testing & Experiments</h3>
+  <div class="field">
+    <textarea name="platform_testing" rows="4" placeholder="Active tests and results. Example:&#10;- Google Performance Max test (Brand A): Week 2 — conversions up 8%, monitoring CPA&#10;- Meta Advantage+ Shopping: Launched for Brand D, early results show 15% lower CPM&#10;- Bing RSA expansion: Testing 3 new headline variants across Non-Brand">{{ report.platform_testing|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">Channel Mix Observations</h3>
+  <div class="field">
+    <textarea name="channel_mix_observations" rows="4" placeholder="Platform-level mix and shifts. Example:&#10;- Google: 62% of spend (up 2pp WoW), strongest ROI on Shopping&#10;- Bing: 18% of spend, stable but lower conversion rates&#10;- Meta: 12% of spend, scaling prospecting with improving efficiency&#10;- Amazon: 8% of spend, ACOS trending down after bid adjustments">{{ report.channel_mix_observations|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">Risk & Opportunity Outlook (Next 2-4 Weeks)</h3>
+  <div class="field">
+    <textarea name="risk_opportunity_outlook" rows="4" placeholder="Forward-looking risks and opportunities. Example:&#10;- Risk: President's Day promo period may spike CPCs 15-20%&#10;- Opportunity: Brand F product launch in 2 weeks — pre-building campaign structure&#10;- Risk: Q1 budget pacing 5% ahead of plan — may need to pull back in March">{{ report.risk_opportunity_outlook|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">GM Discussion Points</h3>
+  <div class="field">
+    <textarea name="gm_discussion_points" rows="4" placeholder="Topics for GM review. Example:&#10;- Budget reallocation proposal: shift $10K from Brand B to Brand A Shopping&#10;- Approval needed for Meta Advantage+ test expansion&#10;- Discuss Brand C performance decline and potential creative refresh">{{ report.gm_discussion_points|default:"" }}</textarea>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- ACTION BAR                                                      -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <div class="ui segment" style="margin-top:2em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+    <button type="submit" class="ui primary button">
+      <i class="save icon"></i> Save Draft
+    </button>
+    <a class="ui button" href="{% url 'dashboard:weekly_report_export' %}?vertical={{ selected_vertical_id }}&week_ending={{ week_ending_str }}">
+      <i class="file word icon"></i> Download Word Doc
+    </a>
+    {% if last_saved %}
+    <span style="color:#6B7D94;font-size:0.88em">
+      <i class="clock icon"></i> Last saved: {{ last_saved|date:"M d, Y g:i A" }}
+    </span>
+    {% endif %}
+  </div>
+
+</form>
+
+{% elif not selected_vertical %}
+<div class="ui message">
+  <i class="info circle icon"></i> Select a vertical and click Load to generate a weekly report.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Populate brand notes from saved report data
+(function() {
+  var saved = {{ brand_notes_json|safe }};
+  for (var brandId in saved) {
+    var el = document.querySelector('textarea[name="brand_note_' + brandId + '"]');
+    if (el && !el.value.trim()) {
+      el.value = saved[brandId];
+    }
+  }
+})();
+</script>
+{% endblock %}

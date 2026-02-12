@@ -136,3 +136,103 @@ th.sortable-col .sort-icon { font-size: 0.8em; }
 /* ── Brand group headers ───────────────────────────────────── */
 .opt-brand-header { font-size: 0.95em; }
 .opt-brand-group .ui.table { margin-top: 0 !important; }
+
+/* ── Stephen Few Scorecards ────────────────────────────────── */
+.scorecard-row {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 1em;
+  margin-bottom: 1.5em;
+}
+.scorecard {
+  flex: 1 1 0% !important;
+  width: auto !important;
+  background: #fff;
+  border: 1px solid #C4D9F2;
+  border-top: 3px solid #256FAD;
+  border-radius: 2px;
+  padding: 0.9em 1.1em;
+  min-width: 0;
+}
+.scorecard-label {
+  font-size: 0.72em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6B7D94;
+  margin-bottom: 0.2em;
+}
+.scorecard-value {
+  font-size: 1.7em;
+  font-weight: 700;
+  color: #313E4F;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.scorecard-value-text {
+  font-size: 1.05em;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  margin-top: 0.2em;
+}
+.scorecard-comparisons {
+  display: flex;
+  gap: 1.1em;
+  margin-top: 0.45em;
+  font-size: 0.82em;
+}
+.scorecard-cmp {
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+}
+.scorecard-cmp-label {
+  color: #6B7D94;
+  font-weight: 700;
+  font-size: 0.9em;
+}
+.scorecard-delta {
+  font-weight: 700;
+}
+
+/* Bullet graph (MTS actual vs goal) */
+.scorecard-bullet {
+  margin-top: 0.6em;
+  height: 8px;
+  background: #E8EEF4;
+  border-radius: 2px;
+  position: relative;
+}
+.scorecard-bullet-fill {
+  height: 100%;
+  border-radius: 2px;
+}
+.scorecard-bullet-fill.on-target   { background: #1a8a38; }
+.scorecard-bullet-fill.warning     { background: #d4800e; }
+.scorecard-bullet-fill.off-target  { background: #c41e1e; }
+.scorecard-bullet-marker {
+  position: absolute;
+  top: -4px;
+  width: 2px;
+  height: 16px;
+  background: #313E4F;
+  border-radius: 1px;
+}
+.scorecard-target-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.35em;
+  font-size: 0.78em;
+  color: #6B7D94;
+  font-weight: 600;
+}
+.scorecard-status-ok      { color: #1a8a38; }
+.scorecard-status-caution { color: #d4800e; }
+.scorecard-status-warn    { color: #c41e1e; }
+
+@media (max-width: 900px) {
+  .scorecard-row { flex-wrap: wrap; }
+  .scorecard { min-width: 45%; }
+}
