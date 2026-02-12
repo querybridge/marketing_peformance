@@ -51,6 +51,10 @@
   {# ── Right: Form + Results ──────────────────────────────────────── #}
   <div class="ten wide column">
 
+    {% if request.access_level == "read_only" %}
+    <div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+    {% endif %}
+
     {% if error %}
     <div class="ui negative message">
       <div class="header">Upload Error</div>
@@ -83,6 +87,7 @@
     </div>
     {% endif %}
 
+    {% if request.access_level != "read_only" %}
     <form class="ui form segment" method="post" enctype="multipart/form-data">
       {% csrf_token %}
       <input type="hidden" name="action" value="upload">
@@ -131,6 +136,7 @@
         <i class="save icon"></i> Save Names
       </button>
     </form>
+    {% endif %}
     {% endif %}
 
   </div>

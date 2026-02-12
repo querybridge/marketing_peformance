@@ -523,6 +523,14 @@ class VerticalAlertTests(TestCase):
 class ExcelExportTests(TestCase):
     """Test the Excel export view."""
 
+    def setUp(self):
+        from django.contrib.auth.models import User
+        self.user = User.objects.create_user(
+            username="testexport", password="testpass123",
+            is_superuser=True, is_staff=True,
+        )
+        self.client.login(username="testexport", password="testpass123")
+
     @classmethod
     def setUpTestData(cls):
         cls.vertical = DimVertical.objects.create(name="Export Vert", slug="export-vert")

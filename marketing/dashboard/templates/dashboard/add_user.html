@@ -1,0 +1,99 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Add User — Paid Marketing Performance{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">
+  <i class="user plus icon"></i>
+  <div class="content">Manage Users</div>
+</h2>
+
+{% if error %}
+<div class="ui error message">
+  <i class="exclamation triangle icon"></i> {{ error }}
+</div>
+{% endif %}
+
+{% if success %}
+<div class="ui success message">
+  <i class="check circle icon"></i> {{ success }}
+</div>
+{% endif %}
+
+<div class="ui segment">
+  <h3 class="ui header">Add New User</h3>
+  <form method="post" class="ui form">
+    {% csrf_token %}
+    <div class="two fields">
+      <div class="required field">
+        <label>Username</label>
+        <input type="text" name="username" placeholder="Username" required>
+      </div>
+      <div class="required field">
+        <label>Email</label>
+        <input type="email" name="email" placeholder="user@belami.com" required>
+      </div>
+    </div>
+    <div class="two fields">
+      <div class="field">
+        <label>First Name</label>
+        <input type="text" name="first_name" placeholder="First name">
+      </div>
+      <div class="field">
+        <label>Last Name</label>
+        <input type="text" name="last_name" placeholder="Last name">
+      </div>
+    </div>
+    <div class="required field">
+      <label>Password</label>
+      <input type="password" name="password" placeholder="Password" required>
+    </div>
+    <div class="field">
+      <label>Groups</label>
+      <div class="ui segment" style="padding:0.8em 1em">
+        {% for g in groups %}
+        <div class="ui checkbox" style="display:block;margin:0.4em 0">
+          <input type="checkbox" name="groups" value="{{ g.id }}" id="group-{{ g.id }}">
+          <label for="group-{{ g.id }}">{{ g.name }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <button type="submit" class="ui primary button">
+      <i class="plus icon"></i> Create User
+    </button>
+  </form>
+</div>
+
+<h3 class="ui header" style="margin-top:2em">Existing Users</h3>
+<table class="ui compact celled striped table">
+  <thead>
+    <tr>
+      <th>Username</th>
+      <th>Email</th>
+      <th>Name</th>
+      <th>Groups</th>
+      <th class="center aligned">Active</th>
+      <th>Joined</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.username }}</td>
+      <td>{{ u.email }}</td>
+      <td>{{ u.get_full_name|default:"—" }}</td>
+      <td>{{ u.groups.all|join:", "|default:"—" }}</td>
+      <td class="center aligned">
+        {% if u.is_active %}<i class="green check icon"></i>{% else %}<i class="red times icon"></i>{% endif %}
+      </td>
+      <td>{{ u.date_joined|date:"Y-m-d" }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6" class="center aligned">No users yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

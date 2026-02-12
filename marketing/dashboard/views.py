@@ -6,11 +6,13 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.auth.models import Group, User
 from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from . import services
+from .auth_config import ALLOWED_EMAIL_DOMAINS
 from django.db.models import Sum
 from .models import (
     DimBrand, DimCampaign, DimCampaignType, DimDate, DimSite, DimSource,
@@ -2443,4 +2445,60 @@ def scoring_config(request):
         "config": config,
         "error": error,
         "saved": saved,
+    })
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Add User
+# ───────────────────────────────────────────────────────────────────────────
+
+def add_user(request):
+    error = None
+    success = None
+
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        email = request.POST.get("email", "").strip()
+        first_name = request.POST.get("first_name", "").strip()
+        last_name = request.POST.get("last_name", "").strip()
+        password = request.POST.get("password", "")
+        group_ids = request.POST.getlist("groups")
+
+        if not username or not email or not password:
+            error = "Username, email, and password are required."
+        elif User.objects.filter(username=username).exists():
+            error = f'Username "{username}" already exists.'
+        else:
+            domain = email.rsplit("@", 1)[-1].lower() if "@" in email else ""
+            if domain not in ALLOWED_EMAIL_DOMAINS:
+                error = (
+                    f'Email domain "{domain}" is not allowed. '
+                    f"Allowed domains: {', '.join(ALLOWED_EMAIL_DOMAINS)}"
+                )
+            else:
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    password=password,
+                    first_name=first_name,
+                    last_name=last_name,
+                )
+                if group_ids:
+                    groups = Group.objects.filter(id__in=group_ids)
+                    user.groups.set(groups)
+                    # SuperUser group → set is_staff and is_superuser
+                    if groups.filter(name="SuperUser").exists():
+                        user.is_staff = True
+                        user.is_superuser = True
+                        user.save(update_fields=["is_staff", "is_superuser"])
+                success = f'User "{username}" created successfully.'
+
+    groups = Group.objects.order_by("name")
+    users = User.objects.prefetch_related("groups").order_by("-date_joined")
+
+    return render(request, "dashboard/add_user.html", {
+        "groups": groups,
+        "users": users,
+        "error": error,
+        "success": success,
     })

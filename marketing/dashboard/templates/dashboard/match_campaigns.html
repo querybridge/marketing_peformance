@@ -17,6 +17,10 @@
 </div>
 {% endif %}
 
+{% if request.access_level == "read_only" %}
+<div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+{% endif %}
+
 {% if saved %}
 <div class="ui positive message">
   <div class="header">Saved</div>
@@ -105,9 +109,11 @@
     </tbody>
   </table>
 
+  {% if request.access_level != "read_only" %}
   <button class="ui primary button" type="submit">
     <i class="save icon"></i> Save Brand Assignments
   </button>
+  {% endif %}
 </form>
 {% else %}
 <div class="ui positive message">

@@ -35,6 +35,10 @@
   </div>
 </form>
 
+{% if request.access_level == "read_only" %}
+<div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+{% endif %}
+
 {% if saved %}
 <div class="ui success message">
   <i class="check circle icon"></i>
@@ -301,9 +305,11 @@
     </div>
 
     <div style="margin-top:1em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+      {% if request.access_level != "read_only" %}
       <button type="submit" class="ui primary button">
         <i class="save icon"></i> Save All Budgets
       </button>
+      {% endif %}
       <span style="color:#6B7D94;font-size:0.88em">
         Leave vertical revenue blank to clear a month. Marketing Revenue Budget = Vert Rev &divide; (1 &minus; Cancel Rate).
       </span>

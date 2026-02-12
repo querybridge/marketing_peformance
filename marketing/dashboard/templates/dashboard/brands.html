@@ -7,6 +7,10 @@
 <h2 class="ui header">Brands</h2>
 <p style="color:#6B7D94">Manage brands within verticals.</p>
 
+{% if request.access_level == "read_only" %}
+<div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+{% endif %}
+
 {% if error %}
 <div class="ui error message">
   <i class="exclamation triangle icon"></i> {{ error }}
@@ -32,6 +36,7 @@
   </div>
 </form>
 
+{% if request.access_level != "read_only" %}
 <!-- ── Upload Brands CSV ───────────────────────────────────────── -->
 <form method="post" enctype="multipart/form-data" action="{% url 'dashboard:brands' %}{% if selected_vertical %}?vertical={{ selected_vertical }}{% endif %}" class="ui form" style="margin-bottom:1.5em">
   {% csrf_token %}
@@ -77,6 +82,7 @@
     </div>
   </div>
 </form>
+{% endif %}
 
 <!-- ── Brands Table ──────────────────────────────────────────── -->
 <table class="ui compact celled striped table">
@@ -129,6 +135,7 @@
       <td style="color:#6B7D94">{{ row.brand.slug }}</td>
       <td class="center aligned">{{ row.campaign_count }}</td>
       <td>
+        {% if request.access_level != "read_only" %}
         <button class="ui small button" onclick="toggleBrandEdit({{ row.brand.id }}, true)">
           <i class="edit icon"></i> Edit
         </button>
@@ -146,6 +153,7 @@
         <span class="ui small basic disabled button" data-tooltip="Remove campaigns first" data-position="top center">
           <i class="trash icon"></i> Delete
         </span>
+        {% endif %}
         {% endif %}
       </td>
     </tr>

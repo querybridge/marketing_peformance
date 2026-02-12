@@ -7,12 +7,17 @@
 <h2 class="ui header">Verticals</h2>
 <p style="color:#6B7D94">Manage business verticals that group brands.</p>
 
+{% if request.access_level == "read_only" %}
+<div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+{% endif %}
+
 {% if error %}
 <div class="ui error message">
   <i class="exclamation triangle icon"></i> {{ error }}
 </div>
 {% endif %}
 
+{% if request.access_level != "read_only" %}
 <!-- ── Add Vertical ──────────────────────────────────────────── -->
 <form method="post" action="{% url 'dashboard:verticals' %}" class="ui form" style="margin-bottom:1.5em">
   {% csrf_token %}
@@ -24,6 +29,7 @@
     </button>
   </div>
 </form>
+{% endif %}
 
 <!-- ── Verticals Table ───────────────────────────────────────── -->
 <table class="ui compact celled striped table">
@@ -57,6 +63,7 @@
       <td style="color:#6B7D94">{{ row.vertical.slug }}</td>
       <td class="center aligned">{{ row.brand_count }}</td>
       <td>
+        {% if request.access_level != "read_only" %}
         <button class="ui small button" onclick="toggleEdit({{ row.vertical.id }}, true)">
           <i class="edit icon"></i> Rename
         </button>
@@ -74,6 +81,7 @@
         <span class="ui small basic disabled button" data-tooltip="Remove brands first" data-position="top center">
           <i class="trash icon"></i> Delete
         </span>
+        {% endif %}
         {% endif %}
       </td>
     </tr>
