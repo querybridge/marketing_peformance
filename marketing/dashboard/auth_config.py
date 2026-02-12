@@ -36,7 +36,7 @@ ACCESS_MATRIX = {
     "upload_csv":           {"Campaign Manager": "full", "General Manager": "no_access", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
 
     # ── Revenue Data ──────────────────────────────────────────────────────
-    "upload_revenue":       {"Campaign Manager": "full", "General Manager": "no_access", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
+    "upload_revenue":       {"Campaign Manager": "full", "General Manager": "no_access", "Admin": "full", "Reporting": "full", "Agency": "read_only", "SuperUser": "full"},
 
     # ── Weekly Optimization ───────────────────────────────────────────────
     "optimization":         {"Campaign Manager": "full", "General Manager": "full", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
