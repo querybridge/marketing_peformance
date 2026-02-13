@@ -16,7 +16,11 @@ A Django application for tracking paid marketing performance across verticals, b
 - **Budget management**: Monthly revenue and MTS targets at vertical level, auto-distributed to brands with manual override support
 - **Weekly optimization**: Campaign-level scalability scoring (0–100) with tROAS and seasonality adjustment recommendations, grouped by brand with revenue-at-risk alerts
 - **Scoring configuration**: Adjustable component weights, elasticity/efficiency windows, and minimum click thresholds
+- **Weekly report**: Structured weekly performance summary with auto-filled executive snapshot (Stephen Few-style scorecards), brand performance table with alert badges, 9 commentary sections, save-draft persistence, and Word doc export
+- **Login & access control**: Middleware-based authentication with 6 user groups, per-view permission matrix (full/read-only/no-access), email domain whitelist, and HTMX-aware session handling
+- **User management**: Admin page to create users, assign groups, and manage access
 - **Excel export**: Optimization results with styled headers via openpyxl
+- **Word export**: Weekly report as formatted .docx with executive snapshot table, brand metrics, and commentary sections
 - **PDF export**: Landscape report with brand table, exceptions panel, and trend charts
 - **HTMX drill-downs**: Click the caret icon on any brand row to expand source/type/campaign breakdowns without full page reload
 
@@ -33,7 +37,7 @@ Star schema with four fact tables at different grains:
 
 Dimension hierarchy: **Vertical > Brand > Source > Campaign Type > Campaign**
 
-Supporting dimensions: DimDate (calendar spine), DimVertical, DimBrand (with external brand_id), DimSource, DimCampaignType, DimCampaign (with UniqueConstraint on external_id + source, ad_group_name for brand matching), DimSite (site_id-to-vertical mapping for revenue ingest), ScoringConfig (singleton for optimization weights/windows).
+Supporting dimensions: DimDate (calendar spine), DimVertical, DimBrand (with external brand_id), DimSource, DimCampaignType, DimCampaign (with UniqueConstraint on external_id + source, ad_group_name for brand matching), DimSite (site_id-to-vertical mapping for revenue ingest), ScoringConfig (singleton for optimization weights/windows), WeeklyReport (draft per vertical per week with commentary and brand notes JSON).
 
 Revenue exists only at brand level. Below brand, revenue is allocated proportionally by spend share.
 
@@ -53,11 +57,13 @@ Revenue exists only at brand level. Below brand, revenue is allocated proportion
 ```bash
 pip install -r requirements.txt
 python manage.py migrate --run-syncdb
+python manage.py setup_groups     # create the 6 permission groups
+python manage.py createsuperuser  # create initial admin account
 python manage.py seed_data        # populate demo data (5 brands, 460 days)
 python manage.py runserver
 ```
 
-Visit `http://localhost:8000/` for the dashboard.
+Visit `http://localhost:8000/` — unauthenticated users are redirected to the login page.
 
 ## URL Routes
 
@@ -77,7 +83,13 @@ Visit `http://localhost:8000/` for the dashboard.
 | `/optimization/` | Weekly optimization — scalability scores and tROAS recommendations |
 | `/optimization/export/` | Download optimization results as Excel |
 | `/scoring/` | Scoring configuration — component weights and window sizes |
+| `/weekly-report/` | Weekly report with executive snapshot, brand metrics, and commentary |
+| `/weekly-report/export/` | Download weekly report as Word document |
+| `/users/` | User management — create accounts and assign groups |
 | `/help/` | User guide and help documentation |
+| `/accounts/login/` | Login page |
+| `/accounts/logout/` | Logout (POST) |
+| `/accounts/password_change/` | Change password |
 
 ## CSV Import
 
@@ -134,6 +146,48 @@ The optimization engine scores each active campaign on **scalability** (0–100)
 
 Campaigns are grouped by brand with revenue-at-risk badges showing projected MTS. Period presets: Last Week, Last 7 Days, Month-to-Date.
 
+## Weekly Report
+
+The weekly report page (`/weekly-report/`) provides a structured performance summary for each vertical:
+
+- **Executive Snapshot** — Stephen Few-style scorecards showing Revenue, Spend, MTS (with bullet graph vs goal), Top Revenue Driver, and Largest YoY Shift. Revenue and Spend cards include color-coded WoW/YoY directional indicators. MTS uses a 3-tier status: green (within ±50 bps of goal), yellow (within ±75 bps), red (beyond ±75 bps).
+- **Performance by MFG** — Top 5 brands by revenue plus any flagged as Needs Attention or Pacing Risk, with WoW/YoY change percentages, MTS, alert badges, and per-brand notes.
+- **9 Commentary sections** — Summary Statement, Major YoY Shifts, What's Working Well, What Needs Attention, What We're Doing About It, Platform Testing & Experiments, Channel Mix Observations, Risk & Opportunity Outlook, GM Discussion Points. Each has placeholder examples.
+- **Save Draft** — Persists all commentary and brand notes per vertical per week (one draft per vertical per week_start, stored in WeeklyReport model with JSONField for brand notes).
+- **Word Export** — Download as formatted .docx via python-docx with executive snapshot table, brand metrics, and all commentary sections.
+
+Data is auto-filled from FactOrdersDaily and FactMediaDaily using the same service functions as the Overview page. WoW uses a 7-day offset; YoY uses a 52-week offset for weekday alignment.
+
+## Authentication & Access Control
+
+Middleware-based (`DashboardAccessMiddleware`) — no per-view decorators required.
+
+- **Login required** for all dashboard pages. Unauthenticated requests redirect to `/accounts/login/`. HTMX requests return 204 with `HX-Redirect` header for clean client-side redirect.
+- **6 user groups**: Campaign Manager, General Manager, Admin, Reporting, Agency, SuperUser
+- **3 access levels**: `full` (GET+POST), `read_only` (GET only, forms hidden), `no_access` (403)
+- **Email domain whitelist**: Only approved domains can be used when creating new users
+- **Permission matrix** (`dashboard/auth_config.py`):
+
+| Page | Campaign Mgr | General Mgr | Admin | Reporting | Agency | SuperUser |
+|------|:---:|:---:|:---:|:---:|:---:|:---:|
+| Overview | Full | Full | Full | Full | Full | Full |
+| Budgets | RO | Full | Full | RO | RO | Full |
+| Campaign Data | Full | — | Full | Full | Full | Full |
+| Revenue Data | Full | — | Full | Full | RO | Full |
+| Weekly Optimization | Full | Full | Full | Full | Full | Full |
+| Weekly Report | Full | RO | Full | Full | RO | Full |
+| Verticals | RO | Full | Full | RO | RO | Full |
+| Brands | RO | Full | Full | RO | RO | Full |
+| Data Dictionary | Full | Full | Full | Full | Full | Full |
+| Alert Rules | Full | Full | Full | Full | Full | Full |
+| Match Campaigns | Full | RO | Full | Full | Full | Full |
+| Site ID Mapping | RO | Full | Full | RO | — | Full |
+| Scoring | Full | — | Full | RO | — | Full |
+| Help | Full | Full | Full | Full | Full | Full |
+| Add User | — | — | Full | — | — | Full |
+
+Key files: `auth_config.py` (matrix + helper), `middleware.py` (enforcement), `context_processors.py` (nav visibility), `management/commands/setup_groups.py` (group creation).
+
 ## Testing
 
 ```bash
@@ -154,6 +208,7 @@ CI/CD via GitLab (`.gitlab-ci.yml`):
 - SQLite
 - ReportLab (PDF generation)
 - openpyxl (Excel export)
+- python-docx (Word export)
 - HTMX (drill-down interactions)
 - Google Charts (trend visualizations)
 - Semantic UI (CSS framework)

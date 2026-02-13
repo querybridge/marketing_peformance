@@ -21,7 +21,9 @@
     <a class="item" href="#setup">First-Time Setup</a>
     <a class="item" href="#cm-workflow">Weekly Campaign Manager Workflow</a>
     <a class="item" href="#optimization">Weekly Optimization &amp; Scoring</a>
+    <a class="item" href="#weekly-report">Weekly Report</a>
     <a class="item" href="#gm-workflow">Weekly GM / Vertical Owner Walkthrough</a>
+    <a class="item" href="#access-control">Access Control &amp; User Groups</a>
     <a class="item" href="#pitfalls">Common Pitfalls &amp; How to Interpret Data</a>
     <a class="item" href="#links">Where to Go Next</a>
   </div>
@@ -261,7 +263,7 @@
 {# ══════════════════════════════════════════════════════════════════ #}
 <h3 class="ui header" id="optimization">
   <i class="sliders horizontal icon"></i>
-  <div class="content">Weekly Optimization &amp; Scoring</div>
+  <div class="content">5. Weekly Optimization &amp; Scoring</div>
 </h3>
 
 <p>
@@ -416,11 +418,91 @@
 <div class="ui divider"></div>
 
 {# ══════════════════════════════════════════════════════════════════ #}
-{# 5. WEEKLY GM / VERTICAL OWNER WALKTHROUGH                        #}
+{# 5b. WEEKLY REPORT                                                 #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="weekly-report">
+  <i class="file alternate icon"></i>
+  <div class="content">6. Weekly Report</div>
+</h3>
+
+<p>
+  The <a href="{% url 'dashboard:weekly_report' %}">Weekly Report</a> page generates a structured
+  performance summary for each vertical on a weekly basis. It combines auto-filled metrics with
+  manager-written commentary into a single document suitable for stakeholder review.
+</p>
+
+<h4 class="ui header">Getting Started</h4>
+<ol class="ui list">
+  <li>Select a <strong>Vertical</strong> and a <strong>Week Ending</strong> date (Sunday), then click <strong>Load</strong>.</li>
+  <li>The Executive Snapshot and Performance by MFG table populate automatically from your campaign and revenue data.</li>
+  <li>Fill in the commentary sections below the table.</li>
+  <li>Click <strong>Save Draft</strong> to persist your work. You can return and edit at any time.</li>
+  <li>Click <strong>Download Word Doc</strong> to export the report as a formatted .docx file.</li>
+</ol>
+
+<h4 class="ui header">Executive Snapshot</h4>
+<p>
+  Five scorecards displayed in a row, following Stephen Few's information dashboard design principles:
+</p>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:200px"><strong>Revenue</strong></td>
+      <td>Total net revenue for the week with WoW and YoY change indicators. Green arrow = growth, red arrow = decline.</td>
+    </tr>
+    <tr>
+      <td><strong>Spend</strong></td>
+      <td>Total media spend for the week with WoW and YoY directional indicators.</td>
+    </tr>
+    <tr>
+      <td><strong>MTS</strong></td>
+      <td>Marketing-to-Sales ratio with a bullet graph comparing actual to goal. The bar color indicates target status: <strong>green</strong> (&plusmn;50 bps of goal), <strong>yellow</strong> (&plusmn;75 bps), <strong>red</strong> (beyond &plusmn;75 bps).</td>
+    </tr>
+    <tr>
+      <td><strong>Top Revenue Driver</strong></td>
+      <td>The brand generating the most revenue this week, with its dollar amount.</td>
+    </tr>
+    <tr>
+      <td><strong>Largest YoY Shift</strong></td>
+      <td>The brand with the biggest absolute year-over-year revenue change, with the dollar delta.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">Performance by MFG Table</h4>
+<p>
+  Shows the top 5 brands by revenue plus any brands flagged as Needs Attention or Pacing Risk.
+  Each row includes Rev WoW%, Rev YoY%, Spend YoY%, MTS, alert badges, and a notes field for per-brand commentary.
+</p>
+
+<h4 class="ui header">Commentary Sections</h4>
+<p>Nine structured sections guide the weekly narrative:</p>
+<div class="ui bulleted list">
+  <div class="item"><strong>Summary Statement</strong> &mdash; 3&ndash;4 sentence overall performance summary</div>
+  <div class="item"><strong>Major YoY Shifts</strong> &mdash; Key year-over-year changes with dollar amounts and causes</div>
+  <div class="item"><strong>What&rsquo;s Working Well</strong> &mdash; Wins, positive trends, and strong performers</div>
+  <div class="item"><strong>What Needs Attention</strong> &mdash; Issues, underperformance, and flags</div>
+  <div class="item"><strong>What We&rsquo;re Doing About It</strong> &mdash; Actions being taken to address issues</div>
+  <div class="item"><strong>Platform Testing &amp; Experiments</strong> &mdash; Active tests, early results, and next steps</div>
+  <div class="item"><strong>Channel Mix Observations</strong> &mdash; Platform-level spend allocation and shifts</div>
+  <div class="item"><strong>Risk &amp; Opportunity Outlook</strong> &mdash; Forward-looking risks and opportunities (2&ndash;4 weeks)</div>
+  <div class="item"><strong>GM Discussion Points</strong> &mdash; Topics requiring GM review or approval</div>
+</div>
+
+<div class="ui info message">
+  <i class="info circle icon"></i>
+  Each commentary field includes placeholder examples showing the expected format and level of detail.
+  Drafts are saved per vertical per week&mdash;you can save, leave, and return to continue editing.
+</div>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 6. WEEKLY GM / VERTICAL OWNER WALKTHROUGH                        #}
 {# ══════════════════════════════════════════════════════════════════ #}
 <h3 class="ui header" id="gm-workflow">
   <i class="building icon"></i>
-  <div class="content">5. Weekly GM / Vertical Owner Walkthrough</div>
+  <div class="content">6. Weekly GM / Vertical Owner Walkthrough</div>
 </h3>
 
 <p>
@@ -470,17 +552,88 @@
 
 <p>
   <strong>Wrap up</strong> by confirming who owns each action item and when the changes will be live.
-  Use the <a href="{% url 'dashboard:export_pdf' %}">PDF export</a> to share the snapshot with stakeholders who weren't in the meeting.
+  Use the <a href="{% url 'dashboard:export_pdf' %}">PDF export</a> to share the snapshot with stakeholders who weren't in the meeting,
+  or use the <a href="{% url 'dashboard:weekly_report' %}">Weekly Report</a> to produce a structured
+  Word document with auto-filled metrics and your commentary.
 </p>
 
 <div class="ui divider"></div>
 
 {# ══════════════════════════════════════════════════════════════════ #}
-{# 6. COMMON PITFALLS                                               #}
+{# 7. ACCESS CONTROL & USER GROUPS                                   #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="access-control">
+  <i class="lock icon"></i>
+  <div class="content">7. Access Control &amp; User Groups</div>
+</h3>
+
+<p>
+  All pages require login. Access is controlled by group membership&mdash;each user belongs to one
+  or more groups, and each page has a defined access level per group.
+</p>
+
+<h4 class="ui header">User Groups</h4>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:200px"><strong>Campaign Manager</strong></td>
+      <td>Day-to-day campaign operators. Full access to data upload, optimization, and reporting. Read-only on budgets, verticals, and brands.</td>
+    </tr>
+    <tr>
+      <td><strong>General Manager</strong></td>
+      <td>Vertical owners. Full access to budgets, verticals, and brands. Read-only on weekly reports. No access to data upload or scoring.</td>
+    </tr>
+    <tr>
+      <td><strong>Admin</strong></td>
+      <td>Full access to all pages including user management. Cannot access Django admin directly.</td>
+    </tr>
+    <tr>
+      <td><strong>Reporting</strong></td>
+      <td>Similar to Campaign Manager. Full access to uploads and reporting. Read-only on budgets, verticals, brands, and scoring.</td>
+    </tr>
+    <tr>
+      <td><strong>Agency</strong></td>
+      <td>External agency users. Full access to uploads and optimization. Read-only on budgets, revenue data, verticals, brands, and weekly reports. No access to site mapping or scoring.</td>
+    </tr>
+    <tr>
+      <td><strong>SuperUser</strong></td>
+      <td>Full access to everything, including Django admin and user management.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">Access Levels</h4>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:200px"><strong>Full Access</strong></td>
+      <td>View pages and submit forms (GET + POST). All buttons and forms are visible.</td>
+    </tr>
+    <tr>
+      <td><strong>Read Only</strong></td>
+      <td>View pages but cannot submit forms. Save/submit buttons are hidden and POST requests are blocked by the middleware. A &ldquo;Read-only access&rdquo; banner appears on applicable pages.</td>
+    </tr>
+    <tr>
+      <td><strong>No Access</strong></td>
+      <td>Page returns a 403 error. The nav link is hidden.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="ui info message">
+  <i class="info circle icon"></i>
+  Users with multiple group memberships receive the <strong>most permissive</strong> access level across their groups.
+  For example, a user in both Campaign Manager (read-only on Budgets) and Admin (full on Budgets) gets full access to Budgets.
+</div>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
+{# 8. COMMON PITFALLS                                               #}
 {# ══════════════════════════════════════════════════════════════════ #}
 <h3 class="ui header" id="pitfalls">
   <i class="exclamation circle icon"></i>
-  <div class="content">6. Common Pitfalls &amp; How to Interpret Data</div>
+  <div class="content">8. Common Pitfalls &amp; How to Interpret Data</div>
 </h3>
 
 <table class="ui compact celled table">
@@ -529,7 +682,7 @@
 {# ══════════════════════════════════════════════════════════════════ #}
 <h3 class="ui header" id="links">
   <i class="compass icon"></i>
-  <div class="content">7. Where to Go Next</div>
+  <div class="content">9. Where to Go Next</div>
 </h3>
 
 <div class="ui relaxed divided list" style="font-size:1.05em">
@@ -545,6 +698,13 @@
     <div class="content">
       <a class="header" href="{% url 'dashboard:optimization' %}">Weekly Optimization</a>
       <div class="description">Campaign-level scalability scoring and tROAS/seasonality recommendations.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="file alternate icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:weekly_report' %}">Weekly Report</a>
+      <div class="description">Structured weekly performance summary with auto-filled metrics, commentary sections, and Word export.</div>
     </div>
   </div>
   <div class="item">
@@ -617,6 +777,15 @@
       <div class="description">Exact logic behind each alert classification (Needs Attention, Doing Well, etc.).</div>
     </div>
   </div>
+  {% if nav_perms.add_user != "no_access" %}
+  <div class="item">
+    <i class="users icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:add_user' %}">User Management</a>
+      <div class="description">Create user accounts, assign groups, and manage access permissions.</div>
+    </div>
+  </div>
+  {% endif %}
 </div>
 
 </div>{# /max-width wrapper #}
