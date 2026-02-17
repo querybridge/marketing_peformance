@@ -1,0 +1,432 @@
+{% extends "dashboard/base.html" %}
+{% load dashboard_filters %}
+
+{% block title %}Promotional Report{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">
+  Promotional Report
+  <div class="sub header">Event-specific performance summary with YoY comparison alignment</div>
+</h2>
+
+<!-- ── Filter Bar ────────────────────────────────────────────── -->
+<form method="get" action="{% url 'dashboard:promotional_report' %}" class="ui form" style="margin-bottom:1.5em">
+  <div class="fields">
+    <div class="three wide field">
+      <label>Promotion</label>
+      <select name="promotion" id="promo-select" class="ui dropdown" required>
+        <option value="">Select Promotion...</option>
+        {% for p in promotions %}
+        <option value="{{ p.id }}" {% if selected_promo_id == p.id %}selected{% endif %}>{{ p.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="three wide field">
+      <label>Vertical</label>
+      <select name="vertical" class="ui dropdown" required>
+        <option value="">Select Vertical...</option>
+        {% for v in verticals %}
+        <option value="{{ v.id }}" {% if selected_vertical_id == v.id %}selected{% endif %}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="two wide field">
+      <label>Revenue</label>
+      <select name="rev" class="ui dropdown">
+        <option value="net" {% if rev_type == "net" %}selected{% endif %}>Net Revenue</option>
+        <option value="new" {% if rev_type == "new" %}selected{% endif %}>New Revenue</option>
+        <option value="platform" {% if rev_type == "platform" %}selected{% endif %}>Platform Revenue</option>
+      </select>
+    </div>
+    <div class="two wide field">
+      <label>Promo Start</label>
+      <input type="date" id="promo-start-display" value="{% if selected_promo %}{{ selected_promo.start_date|date:'Y-m-d' }}{% endif %}" readonly style="background:#f0f0f0">
+    </div>
+    <div class="two wide field">
+      <label>Promo End</label>
+      <input type="date" id="promo-end-display" value="{% if selected_promo %}{{ selected_promo.end_date|date:'Y-m-d' }}{% endif %}" readonly style="background:#f0f0f0">
+    </div>
+    <div class="two wide field">
+      <label>YoY Cmp Start</label>
+      <input type="date" name="cmp_start" value="{{ cmp_start_str }}" required>
+    </div>
+    <div class="two wide field">
+      <label>YoY Cmp End</label>
+      <input type="date" name="cmp_end" value="{{ cmp_end_str }}" required>
+    </div>
+  </div>
+  <div class="fields">
+    <div class="field">
+      <button class="ui primary button" type="submit">Load</button>
+    </div>
+  </div>
+</form>
+
+{% if saved %}
+<div class="ui success message">
+  <i class="check circle icon"></i> Draft saved successfully.
+</div>
+{% endif %}
+
+{% if selected_promo and selected_vertical and report_data %}
+
+<div class="ui segment" style="background:#f0f4f8;margin-bottom:1.5em">
+  <h3 class="ui header" style="margin:0">
+    {{ selected_vertical.name }} — {{ selected_promo.label }}
+  </h3>
+  <div style="color:#6B7D94;font-size:0.9em">
+    Promo: {{ selected_promo.start_date|date:"M d" }}–{{ selected_promo.end_date|date:"M d, Y" }}
+    &nbsp;|&nbsp; Comparison: {{ cmp_start|date:"M d" }}–{{ cmp_end|date:"M d, Y" }}
+    &nbsp;|&nbsp; Revenue: {% if rev_type == "new" %}New{% elif rev_type == "platform" %}Platform{% else %}Net{% endif %}
+  </div>
+  {% if last_saved %}
+  <span style="color:#6B7D94;font-size:0.85em">Last saved: {{ last_saved|date:"M d, Y g:i A" }}</span>
+  {% endif %}
+</div>
+
+{% if report_data.cmp_warning %}
+<div class="ui warning message">
+  <i class="exclamation triangle icon"></i> {{ report_data.cmp_warning }}
+</div>
+{% endif %}
+
+{% if report_data.promo_not_started %}
+<div class="ui info message">
+  <i class="info circle icon"></i> This promotion has not started yet. Scorecards will populate once the promo period begins.
+</div>
+{% else %}
+
+<form method="post" action="{% url 'dashboard:promotional_report' %}" class="ui form">
+  {% csrf_token %}
+  <input type="hidden" name="promotion" value="{{ selected_promo_id }}">
+  <input type="hidden" name="vertical" value="{{ selected_vertical_id }}">
+  <input type="hidden" name="rev" value="{{ rev_type }}">
+  <input type="hidden" name="cmp_start" value="{{ cmp_start_str }}">
+  <input type="hidden" name="cmp_end" value="{{ cmp_end_str }}">
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- PROMO PERIOD-TO-YESTERDAY SNAPSHOT                              -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  {% if report_data.snapshot_ptd %}
+  <h3 class="ui dividing header">Promo Period-to-Yesterday</h3>
+  <div class="scorecard-row">
+
+    <!-- ── Revenue ──────────────────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Revenue</div>
+      <div class="scorecard-value">${{ report_data.snapshot_ptd.revenue|floatformat:0|intcomma }}</div>
+      <div class="scorecard-comparisons">
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">YoY</span>
+          {% if report_data.snapshot_ptd.rev_yoy_pct != None %}
+            {% if report_data.snapshot_ptd.rev_yoy_pct >= 0 %}
+              <span class="scorecard-delta delta-up">&#9650;&nbsp;{{ report_data.snapshot_ptd.rev_yoy_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta delta-down">&#9660;&nbsp;{{ report_data.snapshot_ptd.rev_yoy_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">&mdash;</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Spend ────────────────────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Spend</div>
+      <div class="scorecard-value">${{ report_data.snapshot_ptd.spend|floatformat:0|intcomma }}</div>
+      <div class="scorecard-comparisons">
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">YoY</span>
+          {% if report_data.snapshot_ptd.spend_yoy_pct != None %}
+            {% if report_data.snapshot_ptd.spend_yoy_pct >= 0 %}
+              <span class="scorecard-delta" style="color:#6B7D94">&#9650;&nbsp;{{ report_data.snapshot_ptd.spend_yoy_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta" style="color:#6B7D94">&#9660;&nbsp;{{ report_data.snapshot_ptd.spend_yoy_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">&mdash;</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MTS ──────────────────────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">MTS</div>
+      <div class="scorecard-value">{% if report_data.snapshot_ptd.mts_pct != None %}{{ report_data.snapshot_ptd.mts_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</div>
+      {% if report_data.snapshot_ptd.mts_pct != None %}
+      <div class="scorecard-bullet">
+        <div class="scorecard-bullet-fill {% if report_data.snapshot_ptd.mts_status == 'on_target' %}on-target{% elif report_data.snapshot_ptd.mts_status == 'warning' %}warning{% else %}off-target{% endif %}"
+             style="width:{{ report_data.snapshot_ptd.mts_bullet_pct }}%"></div>
+        {% if report_data.snapshot_ptd.mts_goal_bullet_pct != None %}
+        <div class="scorecard-bullet-marker" style="left:{{ report_data.snapshot_ptd.mts_goal_bullet_pct }}%"></div>
+        {% endif %}
+      </div>
+      <div class="scorecard-target-row">
+        <span>Goal: {% if report_data.snapshot_ptd.mts_goal_pct != None %}{{ report_data.snapshot_ptd.mts_goal_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+        {% if report_data.snapshot_ptd.mts_status == "on_target" %}
+          <span class="scorecard-status-ok">On Target</span>
+        {% elif report_data.snapshot_ptd.mts_status == "warning" %}
+          <span class="scorecard-status-caution">Near Target</span>
+        {% elif report_data.snapshot_ptd.mts_status == "off_target" %}
+          <span class="scorecard-status-warn">Off Target</span>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="scorecard-target-row" style="margin-top:0.5em">
+        <span>Goal: {% if report_data.snapshot_ptd.mts_goal_pct != None %}{{ report_data.snapshot_ptd.mts_goal_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- ── Top Revenue Driver ───────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Top Revenue Driver</div>
+      <div class="scorecard-value scorecard-value-text">{{ report_data.snapshot_ptd.top_driver }}</div>
+      <div style="font-size:0.82em;color:#6B7D94;font-weight:700;margin-top:0.3em">
+        ${{ report_data.snapshot_ptd.top_driver_revenue|floatformat:0|intcomma }}
+      </div>
+    </div>
+
+    <!-- ── Largest YoY Shift ────────────────────────────────────── -->
+    <div class="scorecard">
+      <div class="scorecard-label">Largest YoY Shift</div>
+      <div class="scorecard-value scorecard-value-text">{{ report_data.snapshot_ptd.largest_yoy_shift_name }}</div>
+      <div style="font-size:0.82em;font-weight:700;margin-top:0.3em" class="{% if report_data.snapshot_ptd.largest_yoy_shift_delta >= 0 %}delta-up{% else %}delta-down{% endif %}">
+        {% if report_data.snapshot_ptd.largest_yoy_shift_delta >= 0 %}+{% endif %}${{ report_data.snapshot_ptd.largest_yoy_shift_delta|floatformat:0|intcomma }}
+      </div>
+    </div>
+
+  </div>
+  {% endif %}
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- YESTERDAY ONLY SNAPSHOT                                         -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  {% if report_data.snapshot_yesterday %}
+  <h3 class="ui dividing header">Yesterday Only</h3>
+  <div class="scorecard-row">
+
+    <div class="scorecard">
+      <div class="scorecard-label">Revenue</div>
+      <div class="scorecard-value">${{ report_data.snapshot_yesterday.revenue|floatformat:0|intcomma }}</div>
+      <div class="scorecard-comparisons">
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">YoY</span>
+          {% if report_data.snapshot_yesterday.rev_yoy_pct != None %}
+            {% if report_data.snapshot_yesterday.rev_yoy_pct >= 0 %}
+              <span class="scorecard-delta delta-up">&#9650;&nbsp;{{ report_data.snapshot_yesterday.rev_yoy_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta delta-down">&#9660;&nbsp;{{ report_data.snapshot_yesterday.rev_yoy_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">&mdash;</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="scorecard">
+      <div class="scorecard-label">Spend</div>
+      <div class="scorecard-value">${{ report_data.snapshot_yesterday.spend|floatformat:0|intcomma }}</div>
+      <div class="scorecard-comparisons">
+        <div class="scorecard-cmp">
+          <span class="scorecard-cmp-label">YoY</span>
+          {% if report_data.snapshot_yesterday.spend_yoy_pct != None %}
+            {% if report_data.snapshot_yesterday.spend_yoy_pct >= 0 %}
+              <span class="scorecard-delta" style="color:#6B7D94">&#9650;&nbsp;{{ report_data.snapshot_yesterday.spend_yoy_pct|floatformat:1 }}%</span>
+            {% else %}
+              <span class="scorecard-delta" style="color:#6B7D94">&#9660;&nbsp;{{ report_data.snapshot_yesterday.spend_yoy_pct|floatformat:1 }}%</span>
+            {% endif %}
+          {% else %}<span class="delta-flat">&mdash;</span>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="scorecard">
+      <div class="scorecard-label">MTS</div>
+      <div class="scorecard-value">{% if report_data.snapshot_yesterday.mts_pct != None %}{{ report_data.snapshot_yesterday.mts_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</div>
+      {% if report_data.snapshot_yesterday.mts_pct != None %}
+      <div class="scorecard-bullet">
+        <div class="scorecard-bullet-fill {% if report_data.snapshot_yesterday.mts_status == 'on_target' %}on-target{% elif report_data.snapshot_yesterday.mts_status == 'warning' %}warning{% else %}off-target{% endif %}"
+             style="width:{{ report_data.snapshot_yesterday.mts_bullet_pct }}%"></div>
+        {% if report_data.snapshot_yesterday.mts_goal_bullet_pct != None %}
+        <div class="scorecard-bullet-marker" style="left:{{ report_data.snapshot_yesterday.mts_goal_bullet_pct }}%"></div>
+        {% endif %}
+      </div>
+      <div class="scorecard-target-row">
+        <span>Goal: {% if report_data.snapshot_yesterday.mts_goal_pct != None %}{{ report_data.snapshot_yesterday.mts_goal_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+        {% if report_data.snapshot_yesterday.mts_status == "on_target" %}
+          <span class="scorecard-status-ok">On Target</span>
+        {% elif report_data.snapshot_yesterday.mts_status == "warning" %}
+          <span class="scorecard-status-caution">Near Target</span>
+        {% elif report_data.snapshot_yesterday.mts_status == "off_target" %}
+          <span class="scorecard-status-warn">Off Target</span>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="scorecard-target-row" style="margin-top:0.5em">
+        <span>Goal: {% if report_data.snapshot_yesterday.mts_goal_pct != None %}{{ report_data.snapshot_yesterday.mts_goal_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="scorecard">
+      <div class="scorecard-label">Top Revenue Driver</div>
+      <div class="scorecard-value scorecard-value-text">{{ report_data.snapshot_yesterday.top_driver }}</div>
+      <div style="font-size:0.82em;color:#6B7D94;font-weight:700;margin-top:0.3em">
+        ${{ report_data.snapshot_yesterday.top_driver_revenue|floatformat:0|intcomma }}
+      </div>
+    </div>
+
+    <div class="scorecard">
+      <div class="scorecard-label">Largest YoY Shift</div>
+      <div class="scorecard-value scorecard-value-text">{{ report_data.snapshot_yesterday.largest_yoy_shift_name }}</div>
+      <div style="font-size:0.82em;font-weight:700;margin-top:0.3em" class="{% if report_data.snapshot_yesterday.largest_yoy_shift_delta >= 0 %}delta-up{% else %}delta-down{% endif %}">
+        {% if report_data.snapshot_yesterday.largest_yoy_shift_delta >= 0 %}+{% endif %}${{ report_data.snapshot_yesterday.largest_yoy_shift_delta|floatformat:0|intcomma }}
+      </div>
+    </div>
+
+  </div>
+  {% elif report_data.promo_ended %}
+  <h3 class="ui dividing header">Yesterday Only</h3>
+  <div class="ui info message">
+    <i class="info circle icon"></i> This promotion has ended. The Yesterday Only snapshot is not available.
+  </div>
+  {% endif %}
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- PERFORMANCE BY MFG TABLE                                        -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h3 class="ui dividing header">Performance by MFG</h3>
+  {% if report_data.brand_rows %}
+  <table class="ui compact celled striped table">
+    <thead>
+      <tr>
+        <th>Brand (MFG)</th>
+        <th class="right aligned">Rev YoY %</th>
+        <th class="right aligned">Spend YoY %</th>
+        <th class="right aligned">MTS</th>
+        <th>Status</th>
+        <th style="min-width:200px">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in report_data.brand_rows %}
+      <tr>
+        <td><strong>{{ row.name }}</strong></td>
+        <td class="right aligned">{% if row.rev_yoy_pct != None %}{{ row.rev_yoy_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+        <td class="right aligned">{% if row.spend_yoy_pct != None %}{{ row.spend_yoy_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+        <td class="right aligned">{% if row.mts_pct != None %}{{ row.mts_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+        <td>
+          {% for badge in row.alert_badges %}
+          <span class="ui mini {{ badge.color }} label"><i class="{{ badge.icon }} icon"></i> {{ badge.label }}</span>
+          {% empty %}
+          <span style="color:#999">&mdash;</span>
+          {% endfor %}
+        </td>
+        <td>
+          <textarea name="brand_note_{{ row.id }}" rows="2" style="width:100%;font-size:0.9em" placeholder="Notes for {{ row.name }}..."></textarea>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="ui message"><i class="info circle icon"></i> No brand data available for this period.</div>
+  {% endif %}
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- COMMENTARY SECTIONS                                             -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <h3 class="ui dividing header" style="margin-top:2em">Summary Statement</h3>
+  <div class="field">
+    <textarea name="summary_statement" rows="4" placeholder="Overall promotional performance summary (3-4 sentences). Example: Through day 3 of the President's Day promo, revenue is up 18% vs the comparison period. MTS is tracking within target. Brand X is the top contributor, driving 40% of incremental revenue.">{{ report.summary_statement|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">Major YoY Shifts</h3>
+  <div class="field">
+    <textarea name="major_yoy_shifts" rows="4" placeholder="Key year-over-year changes vs the comparison period. Example:&#10;- Brand A revenue up $65K YoY (+28%) due to expanded Shopping campaigns&#10;- Brand B flat YoY despite 15% more spend — investigating CVR decline&#10;- Overall promo MTS improved 40 bps vs same event last year">{{ report.major_yoy_shifts|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">What's Working Well</h3>
+  <div class="field">
+    <textarea name="whats_working_well" rows="4" placeholder="Highlight wins during the promo. Example:&#10;- Brand X Shopping campaigns delivering 2.5x ROAS during promo&#10;- Promo-specific ad copy driving 22% higher CTR than evergreen&#10;- Brand D capturing incremental demand with expanded budgets">{{ report.whats_working_well|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">What Needs Attention</h3>
+  <div class="field">
+    <textarea name="whats_needs_attention" rows="4" placeholder="Flag issues during the promo. Example:&#10;- Brand C CPC spiked 35% on day 1 — competitor aggression&#10;- Brand E promo landing page load time increased to 4.2s&#10;- Amazon Sponsored Ads ACOS above target across all brands">{{ report.whats_needs_attention|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">What We're Doing About It</h3>
+  <div class="field">
+    <textarea name="what_were_doing" rows="4" placeholder="Actions being taken. Example:&#10;- Shifting Brand C budget from Non-Brand to Shopping for remainder of promo&#10;- Escalated Brand E page speed issue to web team for priority fix&#10;- Reducing Amazon bids on high-ACOS keywords and reallocating to Sponsored Brands">{{ report.what_were_doing|default:"" }}</textarea>
+  </div>
+
+  <h3 class="ui dividing header">GM Discussion Points</h3>
+  <div class="field">
+    <textarea name="gm_discussion_points" rows="4" placeholder="Topics for GM review. Example:&#10;- Request approval to extend promo budgets by $15K for Brand A&#10;- Post-promo analysis timeline: results available 3 days after promo end&#10;- Discuss whether to carry promo pricing into the following week">{{ report.gm_discussion_points|default:"" }}</textarea>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <!-- ACTION BAR                                                      -->
+  <!-- ════════════════════════════════════════════════════════════════ -->
+  <div class="ui segment" style="margin-top:2em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+    {% if request.access_level != "read_only" %}
+    <button type="submit" class="ui primary button">
+      <i class="save icon"></i> Save Draft
+    </button>
+    {% endif %}
+    <a class="ui button" href="{% url 'dashboard:promotional_report_export' %}?promotion={{ selected_promo_id }}&vertical={{ selected_vertical_id }}&cmp_start={{ cmp_start_str }}&cmp_end={{ cmp_end_str }}&rev={{ rev_type }}">
+      <i class="file word icon"></i> Download Word Doc
+    </a>
+    {% if last_saved %}
+    <span style="color:#6B7D94;font-size:0.88em">
+      <i class="clock icon"></i> Last saved: {{ last_saved|date:"M d, Y g:i A" }}
+    </span>
+    {% endif %}
+  </div>
+
+</form>
+
+{% endif %}{# not promo_not_started #}
+
+{% elif not selected_promo or not selected_vertical %}
+<div class="ui message">
+  <i class="info circle icon"></i> Select a promotion, vertical, and comparison dates, then click Load to generate a promotional report.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-populate promo date range when promotion is selected
+(function() {
+  var sel = document.getElementById('promo-select');
+  if (!sel) return;
+  sel.addEventListener('change', function() {
+    var promoId = this.value;
+    if (!promoId) {
+      document.getElementById('promo-start-display').value = '';
+      document.getElementById('promo-end-display').value = '';
+      return;
+    }
+    fetch('{% url "dashboard:promotion_detail" promo_id=0 %}'.replace('/0/', '/' + promoId + '/'))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        document.getElementById('promo-start-display').value = data.start_date;
+        document.getElementById('promo-end-display').value = data.end_date;
+      });
+  });
+})();
+
+// Populate brand notes from saved report data
+(function() {
+  var saved = {{ brand_notes_json|safe }};
+  for (var brandId in saved) {
+    var el = document.querySelector('textarea[name="brand_note_' + brandId + '"]');
+    if (el && !el.value.trim()) {
+      el.value = saved[brandId];
+    }
+  }
+})();
+</script>
+{% endblock %}

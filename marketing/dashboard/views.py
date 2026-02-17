@@ -8,7 +8,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.models import Group, User
 from django.core.paginator import Paginator
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.text import slugify
 from . import services
@@ -17,7 +17,8 @@ from django.db.models import Sum
 from .models import (
     DimBrand, DimCampaign, DimCampaignType, DimDate, DimSite, DimSource,
     DimVertical, FactBudget, FactMediaDaily, FactOrdersDaily,
-    FactVerticalBudget, ScoringConfig, WeeklyReport,
+    FactVerticalBudget, PromotionalReport, PromotionDate, ScoringConfig,
+    WeeklyReport,
 )
 
 
@@ -2627,3 +2628,228 @@ def export_weekly_report(request):
     )
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Promotion Dates (CRUD admin)
+# ───────────────────────────────────────────────────────────────────────────
+
+def promotion_dates(request):
+    error = None
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "add":
+            name = request.POST.get("name", "").strip()
+            start = _parse_date(request.POST.get("start_date"))
+            end = _parse_date(request.POST.get("end_date"))
+            if not name:
+                error = "Promotion name is required."
+            elif not start or not end:
+                error = "Both start and end dates are required."
+            elif end < start:
+                error = "End date must be on or after start date."
+            elif PromotionDate.objects.filter(name=name, start_date=start).exists():
+                error = f'A promotion "{name}" starting {start} already exists.'
+            else:
+                PromotionDate.objects.create(name=name, start_date=start, end_date=end)
+                return redirect("dashboard:promotion_dates")
+
+        elif action == "edit":
+            pid = request.POST.get("id")
+            name = request.POST.get("name", "").strip()
+            start = _parse_date(request.POST.get("start_date"))
+            end = _parse_date(request.POST.get("end_date"))
+            if not name:
+                error = "Promotion name is required."
+            elif not start or not end:
+                error = "Both start and end dates are required."
+            elif end < start:
+                error = "End date must be on or after start date."
+            elif PromotionDate.objects.filter(name=name, start_date=start).exclude(id=pid).exists():
+                error = f'A promotion "{name}" starting {start} already exists.'
+            else:
+                promo = get_object_or_404(PromotionDate, id=pid)
+                promo.name = name
+                promo.start_date = start
+                promo.end_date = end
+                promo.save()
+                return redirect("dashboard:promotion_dates")
+
+        elif action == "delete":
+            pid = request.POST.get("id")
+            if pid:
+                promo = get_object_or_404(PromotionDate, id=pid)
+                promo.delete()
+                return redirect("dashboard:promotion_dates")
+
+    promotions = PromotionDate.objects.all()
+    return render(request, "dashboard/promotion_dates.html", {
+        "promotions": promotions,
+        "error": error,
+    })
+
+
+# ───────────────────────────────────────────────────────────────────────────
+# Promotional Report
+# ───────────────────────────────────────────────────────────────────────────
+
+def promotional_report(request):
+    from .promo_report_services import build_promo_report_data
+
+    promotions = PromotionDate.objects.all()
+    verticals = DimVertical.objects.all()
+
+    promo_id = request.GET.get("promotion") or request.POST.get("promotion")
+    vertical_id = request.GET.get("vertical") or request.POST.get("vertical")
+    cmp_start_str = request.GET.get("cmp_start") or request.POST.get("cmp_start")
+    cmp_end_str = request.GET.get("cmp_end") or request.POST.get("cmp_end")
+    rev_type = request.GET.get("rev", "net") or request.POST.get("rev", "net")
+    if rev_type not in ("net", "new", "platform"):
+        rev_type = "net"
+
+    selected_promo = None
+    selected_vertical = None
+    report = None
+    report_data = None
+    saved = False
+    last_saved = None
+    cmp_start = _parse_date(cmp_start_str)
+    cmp_end = _parse_date(cmp_end_str)
+
+    if promo_id:
+        promo_id = int(promo_id)
+        selected_promo = PromotionDate.objects.filter(id=promo_id).first()
+
+    if vertical_id:
+        vertical_id = int(vertical_id)
+        selected_vertical = DimVertical.objects.filter(id=vertical_id).first()
+
+    if request.method == "POST" and selected_promo and selected_vertical and cmp_start and cmp_end:
+        report, _ = PromotionalReport.objects.update_or_create(
+            vertical_id=vertical_id,
+            promotion_id=promo_id,
+            defaults={
+                "cmp_start": cmp_start,
+                "cmp_end": cmp_end,
+                "summary_statement": request.POST.get("summary_statement", ""),
+                "major_yoy_shifts": request.POST.get("major_yoy_shifts", ""),
+                "whats_working_well": request.POST.get("whats_working_well", ""),
+                "whats_needs_attention": request.POST.get("whats_needs_attention", ""),
+                "what_were_doing": request.POST.get("what_were_doing", ""),
+                "gm_discussion_points": request.POST.get("gm_discussion_points", ""),
+                "brand_notes": {
+                    k.replace("brand_note_", ""): v
+                    for k, v in request.POST.items()
+                    if k.startswith("brand_note_") and v.strip()
+                },
+            },
+        )
+        saved = True
+
+    if selected_promo and selected_vertical and cmp_start and cmp_end:
+        if not report:
+            report = PromotionalReport.objects.filter(
+                vertical_id=vertical_id, promotion_id=promo_id,
+            ).first()
+        if report:
+            last_saved = report.updated_at
+            # Use saved comparison dates if not explicitly provided
+            if not cmp_start:
+                cmp_start = report.cmp_start
+            if not cmp_end:
+                cmp_end = report.cmp_end
+
+        report_data = build_promo_report_data(
+            vertical_id,
+            selected_promo.start_date,
+            selected_promo.end_date,
+            cmp_start,
+            cmp_end,
+            rev_type=rev_type,
+        )
+
+    brand_notes_json = json.dumps(report.brand_notes) if report and report.brand_notes else "{}"
+
+    ctx = {
+        "promotions": promotions,
+        "verticals": verticals,
+        "selected_promo": selected_promo,
+        "selected_promo_id": promo_id,
+        "selected_vertical": selected_vertical,
+        "selected_vertical_id": vertical_id,
+        "rev_type": rev_type,
+        "cmp_start": cmp_start,
+        "cmp_end": cmp_end,
+        "cmp_start_str": cmp_start.isoformat() if cmp_start else "",
+        "cmp_end_str": cmp_end.isoformat() if cmp_end else "",
+        "report": report,
+        "report_data": report_data,
+        "saved": saved,
+        "last_saved": last_saved,
+        "brand_notes_json": brand_notes_json,
+    }
+    return render(request, "dashboard/promotional_report.html", ctx)
+
+
+def export_promotional_report(request):
+    from .promo_report_services import build_promo_report_data
+    from .promo_report_export import build_promo_report_docx
+
+    promo_id = request.GET.get("promotion")
+    vertical_id = request.GET.get("vertical")
+    cmp_start_str = request.GET.get("cmp_start")
+    cmp_end_str = request.GET.get("cmp_end")
+    rev_type = request.GET.get("rev", "net")
+    if rev_type not in ("net", "new", "platform"):
+        rev_type = "net"
+
+    if not promo_id or not vertical_id or not cmp_start_str or not cmp_end_str:
+        return HttpResponse("promotion, vertical, cmp_start, and cmp_end parameters required", status=400)
+
+    promo_id = int(promo_id)
+    vertical_id = int(vertical_id)
+    cmp_start = date.fromisoformat(cmp_start_str)
+    cmp_end = date.fromisoformat(cmp_end_str)
+
+    promo = get_object_or_404(PromotionDate, id=promo_id)
+    vertical = get_object_or_404(DimVertical, id=vertical_id)
+    report = PromotionalReport.objects.filter(
+        vertical_id=vertical_id, promotion_id=promo_id,
+    ).first()
+
+    data = build_promo_report_data(
+        vertical_id, promo.start_date, promo.end_date, cmp_start, cmp_end,
+        rev_type=rev_type,
+    )
+
+    docx_bytes = build_promo_report_docx(
+        vertical_name=vertical.name,
+        promo_label=promo.label,
+        promo_start=promo.start_date,
+        promo_end=promo.end_date,
+        cmp_start=cmp_start,
+        cmp_end=cmp_end,
+        snapshot_ptd=data["snapshot_ptd"],
+        snapshot_yesterday=data["snapshot_yesterday"],
+        brand_rows=data["brand_rows"],
+        report=report,
+    )
+
+    filename = f"promo-report-{vertical.slug}-{promo.label.replace(' ', '-').lower()}.docx"
+    response = HttpResponse(
+        docx_bytes,
+        content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def promotion_detail_json(request, promo_id):
+    promo = get_object_or_404(PromotionDate, id=promo_id)
+    return JsonResponse({
+        "start_date": promo.start_date.isoformat(),
+        "end_date": promo.end_date.isoformat(),
+        "label": promo.label,
+    })

@@ -1,0 +1,122 @@
+{% extends "dashboard/base.html" %}
+
+{% block title %}Promotion Dates — Paid Marketing Performance{% endblock %}
+
+{% block content %}
+
+<h2 class="ui header">Promotion Dates</h2>
+<p style="color:#6B7D94">Manage promotional event periods for reporting.</p>
+
+{% if request.access_level == "read_only" %}
+<div class="ui info message"><i class="eye icon"></i> Read-only access.</div>
+{% endif %}
+
+{% if error %}
+<div class="ui error message">
+  <i class="exclamation triangle icon"></i> {{ error }}
+</div>
+{% endif %}
+
+{% if request.access_level != "read_only" %}
+<!-- ── Add Promotion ──────────────────────────────────────────── -->
+<form method="post" action="{% url 'dashboard:promotion_dates' %}" class="ui form" style="margin-bottom:1.5em">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="add">
+  <div class="fields">
+    <div class="six wide field">
+      <label>Promotion Name</label>
+      <input type="text" name="name" placeholder="e.g. Black Friday" required>
+    </div>
+    <div class="three wide field">
+      <label>Start Date</label>
+      <input type="date" name="start_date" required>
+    </div>
+    <div class="three wide field">
+      <label>End Date</label>
+      <input type="date" name="end_date" required>
+    </div>
+    <div class="four wide field" style="display:flex;align-items:flex-end">
+      <button type="submit" class="ui primary button">
+        <i class="plus icon"></i> Add Promotion
+      </button>
+    </div>
+  </div>
+</form>
+{% endif %}
+
+<!-- ── Promotions Table ───────────────────────────────────────── -->
+<table class="ui compact celled striped table">
+  <thead>
+    <tr>
+      <th>Promotion Name</th>
+      <th>Start Date</th>
+      <th>End Date</th>
+      <th>Label</th>
+      <th style="width:340px">Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in promotions %}
+    <tr>
+      <td>
+        <strong id="name-display-{{ p.id }}">{{ p.name }}</strong>
+        <form method="post" action="{% url 'dashboard:promotion_dates' %}"
+              id="edit-form-{{ p.id }}" class="ui form"
+              style="display:none;margin:0">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="edit">
+          <input type="hidden" name="id" value="{{ p.id }}">
+          <div class="fields" style="margin:0">
+            <div class="six wide field">
+              <input type="text" name="name" value="{{ p.name }}" required>
+            </div>
+            <div class="four wide field">
+              <input type="date" name="start_date" value="{{ p.start_date|date:'Y-m-d' }}" required>
+            </div>
+            <div class="four wide field">
+              <input type="date" name="end_date" value="{{ p.end_date|date:'Y-m-d' }}" required>
+            </div>
+            <div class="two wide field">
+              <button type="submit" class="ui small positive button">Save</button>
+              <button type="button" class="ui small button"
+                      onclick="togglePromoEdit({{ p.id }}, false)">Cancel</button>
+            </div>
+          </div>
+        </form>
+      </td>
+      <td id="start-display-{{ p.id }}">{{ p.start_date|date:"M d, Y" }}</td>
+      <td id="end-display-{{ p.id }}">{{ p.end_date|date:"M d, Y" }}</td>
+      <td>{{ p.label }}</td>
+      <td>
+        {% if request.access_level != "read_only" %}
+        <button class="ui small button" onclick="togglePromoEdit({{ p.id }}, true)">
+          <i class="edit icon"></i> Edit
+        </button>
+        <form method="post" action="{% url 'dashboard:promotion_dates' %}" style="display:inline">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="{{ p.id }}">
+          <button type="submit" class="ui small negative button"
+                  onclick="return confirm('Delete {{ p.name }} {{ p.start_date.year }}?')">
+            <i class="trash icon"></i> Delete
+          </button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="center aligned">No promotions yet. Add one above.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+function togglePromoEdit(id, show) {
+  document.getElementById('name-display-' + id).style.display = show ? 'none' : '';
+  document.getElementById('start-display-' + id).style.display = show ? 'none' : '';
+  document.getElementById('end-display-' + id).style.display = show ? 'none' : '';
+  document.getElementById('edit-form-' + id).style.display = show ? '' : 'none';
+}
+</script>
+
+{% endblock %}

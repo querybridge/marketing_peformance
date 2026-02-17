@@ -38,4 +38,8 @@ urlpatterns = [
     path("users/", views.add_user, name="add_user"),
     path("weekly-report/", views.weekly_report, name="weekly_report"),
     path("weekly-report/export/", views.export_weekly_report, name="weekly_report_export"),
+    path("promotion-dates/", views.promotion_dates, name="promotion_dates"),
+    path("promotional-report/", views.promotional_report, name="promotional_report"),
+    path("promotional-report/export/", views.export_promotional_report, name="promotional_report_export"),
+    path("api/promotion/<int:promo_id>/", views.promotion_detail_json, name="promotion_detail"),
 ]

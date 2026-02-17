@@ -72,6 +72,12 @@ ACCESS_MATRIX = {
     # ── Weekly Report ────────────────────────────────────────────────────
     "weekly_report":        {"Campaign Manager": "full", "General Manager": "read_only", "Admin": "full", "Reporting": "full", "Agency": "read_only", "SuperUser": "full"},
     "weekly_report_export": {"Campaign Manager": "full", "General Manager": "read_only", "Admin": "full", "Reporting": "full", "Agency": "read_only", "SuperUser": "full"},
+
+    # ── Promotional Report ────────────────────────────────────────────
+    "promotion_dates":              {"Campaign Manager": "read_only", "General Manager": "full", "Admin": "full", "Reporting": "read_only", "Agency": "read_only", "SuperUser": "full"},
+    "promotional_report":           {"Campaign Manager": "full", "General Manager": "read_only", "Admin": "full", "Reporting": "full", "Agency": "read_only", "SuperUser": "full"},
+    "promotional_report_export":    {"Campaign Manager": "full", "General Manager": "read_only", "Admin": "full", "Reporting": "full", "Agency": "read_only", "SuperUser": "full"},
+    "promotion_detail":             {"Campaign Manager": "full", "General Manager": "full", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
 }
 
 # Priority order for resolving multi-group membership (higher is better).

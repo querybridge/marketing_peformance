@@ -115,7 +115,7 @@ def build_report_data(vertical_id, week_start, week_end):
         b_mts = b_spend / b_rev if b_rev > 0 else None
 
         bgt = budgets.get(b.id, {})
-        mts_budget = float(bgt.get("mts", 0)) if bgt.get("mts") else 0
+        mts_budget = float(bgt.get("mts_budget", 0)) if bgt.get("mts_budget") else 0
 
         # Classify for alert badges
         alerts = classify_brand(

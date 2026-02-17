@@ -39,6 +39,9 @@
           {% if nav_perms.weekly_report != "no_access" %}
           <a class="item" href="{% url 'dashboard:weekly_report' %}">Weekly Report</a>
           {% endif %}
+          {% if nav_perms.promotional_report != "no_access" %}
+          <a class="item" href="{% url 'dashboard:promotional_report' %}">Promotional Report</a>
+          {% endif %}
         </div>
       </div>
       {% endif %}
@@ -101,6 +104,9 @@
       {% endif %}
       {% if nav_perms.scoring_config != "no_access" %}
       <a href="{% url 'dashboard:scoring_config' %}" style="color:#9BAFC4;margin:0 1em">Scoring</a>
+      {% endif %}
+      {% if nav_perms.promotion_dates != "no_access" %}
+      <a href="{% url 'dashboard:promotion_dates' %}" style="color:#9BAFC4;margin:0 1em">Promotion Dates</a>
       {% endif %}
       {% if nav_perms.help != "no_access" %}
       <a href="{% url 'dashboard:help' %}" style="color:#9BAFC4;margin:0 1em">Help</a>

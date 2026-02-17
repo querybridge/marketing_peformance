@@ -22,6 +22,7 @@
     <a class="item" href="#cm-workflow">Weekly Campaign Manager Workflow</a>
     <a class="item" href="#optimization">Weekly Optimization &amp; Scoring</a>
     <a class="item" href="#weekly-report">Weekly Report</a>
+    <a class="item" href="#promo-report">Promotional Report</a>
     <a class="item" href="#gm-workflow">Weekly GM / Vertical Owner Walkthrough</a>
     <a class="item" href="#access-control">Access Control &amp; User Groups</a>
     <a class="item" href="#pitfalls">Common Pitfalls &amp; How to Interpret Data</a>
@@ -498,6 +499,101 @@
 <div class="ui divider"></div>
 
 {# ══════════════════════════════════════════════════════════════════ #}
+{# 6b. PROMOTIONAL REPORT                                            #}
+{# ══════════════════════════════════════════════════════════════════ #}
+<h3 class="ui header" id="promo-report">
+  <i class="calendar check icon"></i>
+  <div class="content">6b. Promotional Report</div>
+</h3>
+
+<p>
+  The <a href="{% url 'dashboard:promotional_report' %}">Promotional Report</a> is designed for
+  short tent-pole events (President&rsquo;s Day, July 4th, Black Friday) with event-specific date ranges
+  and year-over-year comparison alignment. Unlike the Weekly Report&rsquo;s fixed Mon&ndash;Sun cadence,
+  the Promotional Report uses custom date ranges defined by each promotion.
+</p>
+
+<h4 class="ui header">Promotion Dates Management</h4>
+<p>
+  Before creating a promotional report, set up the event in
+  <a href="{% url 'dashboard:promotion_dates' %}">Promotion Dates</a> (footer link).
+  Each promotion has a name (e.g., &ldquo;Black Friday&rdquo;), start date, and end date.
+  The system generates a label combining the name and year (e.g., &ldquo;Black Friday 2026&rdquo;).
+</p>
+
+<h4 class="ui header">Workflow</h4>
+<ol class="ui list">
+  <li>Select a <strong>Promotion</strong> from the dropdown &mdash; the promo date range auto-populates.</li>
+  <li>Select a <strong>Vertical</strong>.</li>
+  <li>Enter the <strong>YoY Comparison Start</strong> and <strong>End</strong> dates (typically the same event last year).</li>
+  <li>Click <strong>Load</strong> to generate the report with two scorecard rows and brand performance table.</li>
+  <li>Fill in the 6 commentary sections.</li>
+  <li>Click <strong>Save Draft</strong> to persist. Click <strong>Download Word Doc</strong> to export.</li>
+</ol>
+
+<h4 class="ui header">Two Scorecard Rows</h4>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:220px"><strong>Promo Period-to-Yesterday</strong></td>
+      <td>Cumulative performance from the promo start date through yesterday, compared against the same number of elapsed days from the comparison start. This shows how the overall promo is tracking.</td>
+    </tr>
+    <tr>
+      <td><strong>Yesterday Only</strong></td>
+      <td>Single-day performance for yesterday, compared against the corresponding day offset in the comparison period. This shows the most recent day&rsquo;s momentum.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">YoY Comparison Alignment</h4>
+<p>
+  The comparison period aligns by <strong>day count</strong>, not calendar date:
+</p>
+<div class="ui bulleted list">
+  <div class="item"><strong>Period-to-Yesterday:</strong> If the promo is 3 days in (days 1&ndash;3), the comparison uses the first 3 days of the comparison range.</div>
+  <div class="item"><strong>Yesterday Only:</strong> If yesterday is day 4 of the promo, the comparison uses day 4 of the comparison range.</div>
+</div>
+<p>
+  <strong>Example:</strong> President&rsquo;s Day 2026 runs Feb 14&ndash;17. Comparison is set to Feb 15&ndash;18, 2025
+  (last year&rsquo;s event). On Feb 16, 2026 (day 3 of promo):
+</p>
+<div class="ui bulleted list">
+  <div class="item">Period-to-yesterday compares Feb 14&ndash;15 (2 days) vs Feb 15&ndash;16, 2025 (2 days)</div>
+  <div class="item">Yesterday only compares Feb 15, 2026 (day 2) vs Feb 16, 2025 (day 2)</div>
+</div>
+
+<h4 class="ui header">Edge Cases</h4>
+<table class="ui very basic compact table">
+  <tbody>
+    <tr>
+      <td style="width:250px"><strong>Promo ended before yesterday</strong></td>
+      <td>Period-to-yesterday uses the full promo range. Yesterday Only shows &ldquo;Promo has ended&rdquo; message.</td>
+    </tr>
+    <tr>
+      <td><strong>Promo starts in the future</strong></td>
+      <td>Both rows show a &ldquo;Promo has not started&rdquo; message.</td>
+    </tr>
+    <tr>
+      <td><strong>Comparison range too short</strong></td>
+      <td>A warning appears: &ldquo;Comparison period too short for full alignment.&rdquo; The system uses available comparison days.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h4 class="ui header">Commentary Sections</h4>
+<p>Six sections (a subset of the Weekly Report&rsquo;s nine):</p>
+<div class="ui bulleted list">
+  <div class="item"><strong>Summary Statement</strong></div>
+  <div class="item"><strong>Major YoY Shifts</strong></div>
+  <div class="item"><strong>What&rsquo;s Working Well</strong></div>
+  <div class="item"><strong>What Needs Attention</strong></div>
+  <div class="item"><strong>What We&rsquo;re Doing About It</strong></div>
+  <div class="item"><strong>GM Discussion Points</strong></div>
+</div>
+
+<div class="ui divider"></div>
+
+{# ══════════════════════════════════════════════════════════════════ #}
 {# 6. WEEKLY GM / VERTICAL OWNER WALKTHROUGH                        #}
 {# ══════════════════════════════════════════════════════════════════ #}
 <h3 class="ui header" id="gm-workflow">
@@ -705,6 +801,13 @@
     <div class="content">
       <a class="header" href="{% url 'dashboard:weekly_report' %}">Weekly Report</a>
       <div class="description">Structured weekly performance summary with auto-filled metrics, commentary sections, and Word export.</div>
+    </div>
+  </div>
+  <div class="item">
+    <i class="calendar check icon"></i>
+    <div class="content">
+      <a class="header" href="{% url 'dashboard:promotional_report' %}">Promotional Report</a>
+      <div class="description">Event-specific performance report with YoY comparison alignment, two scorecard rows, and Word export.</div>
     </div>
   </div>
   <div class="item">

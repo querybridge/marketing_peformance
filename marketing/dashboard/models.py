@@ -345,3 +345,53 @@ class WeeklyReport(models.Model):
 
     def __str__(self):
         return f"{self.vertical} — {self.week_start} to {self.week_end}"
+
+
+class PromotionDate(models.Model):
+    """A named promotional event with a date range (e.g. Black Friday 2026)."""
+
+    name = models.CharField(max_length=200)
+    start_date = models.DateField()
+    end_date = models.DateField()
+
+    class Meta:
+        ordering = ["-start_date"]
+        unique_together = ["name", "start_date"]
+
+    @property
+    def label(self):
+        return f"{self.name} {self.start_date.year}"
+
+    def __str__(self):
+        return self.label
+
+
+class PromotionalReport(models.Model):
+    """Draft promotional report — one per vertical per promotion."""
+
+    vertical = models.ForeignKey(
+        DimVertical, on_delete=models.CASCADE, related_name="promo_reports",
+    )
+    promotion = models.ForeignKey(
+        PromotionDate, on_delete=models.CASCADE, related_name="reports",
+    )
+    cmp_start = models.DateField()
+    cmp_end = models.DateField()
+
+    summary_statement = models.TextField(blank=True, default="")
+    major_yoy_shifts = models.TextField(blank=True, default="")
+    whats_working_well = models.TextField(blank=True, default="")
+    whats_needs_attention = models.TextField(blank=True, default="")
+    what_were_doing = models.TextField(blank=True, default="")
+    gm_discussion_points = models.TextField(blank=True, default="")
+    brand_notes = models.JSONField(default=dict, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["vertical", "promotion"]
+        ordering = ["-promotion__start_date"]
+
+    def __str__(self):
+        return f"{self.vertical} — {self.promotion.label}"
