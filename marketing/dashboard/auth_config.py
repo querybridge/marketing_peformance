@@ -28,6 +28,7 @@ ACCESS_MATRIX = {
     "drill_source":         {"Campaign Manager": "full", "General Manager": "full", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
     "drill_type":           {"Campaign Manager": "full", "General Manager": "full", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
     "export_pdf":           {"Campaign Manager": "full", "General Manager": "full", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
+    "export_overview_xlsx": {"Campaign Manager": "full", "General Manager": "full", "Admin": "full", "Reporting": "full", "Agency": "full", "SuperUser": "full"},
 
     # ── Budgets ───────────────────────────────────────────────────────────
     "budgets":              {"Campaign Manager": "read_only", "General Manager": "full", "Admin": "full", "Reporting": "read_only", "Agency": "read_only", "SuperUser": "full"},

@@ -14,6 +14,13 @@
 </div>
 {% endif %}
 
+{% if alert_filter %}
+<div class="ui info message" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1em">
+  <span><i class="filter icon"></i> Showing brands with status: <strong>{{ alert_filter_label }}</strong></span>
+  <button class="ui mini basic button" type="button" onclick="clearAlertFilter()">Clear</button>
+</div>
+{% endif %}
+
 <!-- ── Trend Charts ──────────────────────────────────────────── -->
 <div class="ui three column stackable grid">
   <div class="column">
@@ -61,10 +68,12 @@
 <div class="ui segment" style="padding:0.8em 1em">
   <div class="ui labels">
     {% for key, a in exceptions.items %}
-    <span class="ui {{ a.color }} label">
+    <a class="ui {{ a.color }} label{% if key == alert_filter %} active-alert-badge{% endif %}"
+       href="#" onclick="event.preventDefault();toggleAlertFilter('{{ key }}');"
+       style="cursor:pointer">
       <i class="{{ a.icon }} icon"></i> {{ a.label }}
       <span class="detail">{{ a.count }}</span>
-    </span>
+    </a>
     {% endfor %}
   </div>
 </div>
@@ -86,6 +95,9 @@
     background: #f9fafb;
   }
   tr.brand-row.brand-focused { background: #e8f4fd !important; }
+  .ui.labels a.label { transition: transform 0.1s, box-shadow 0.1s; }
+  .ui.labels a.label:hover { transform: scale(1.05); box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+  .active-alert-badge { outline: 2px solid rgba(0,0,0,0.4); outline-offset: 1px; transform: scale(1.08); }
 </style>
 <div class="ui segment">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6em;flex-wrap:wrap;gap:0.4em">
@@ -201,7 +213,24 @@
   </div>
   {% endif %}
 
+  <div style="text-align:right;margin-top:0.6em">
+    <a href="{% url 'dashboard:export_overview_xlsx' %}?{{ filter_qs }}"
+       style="color:#256FAD;font-size:0.9em"><i class="download icon"></i>Download as Excel</a>
+  </div>
+
 </div>
+
+{% if data_freshness %}
+<div style="text-align:center;color:#6B7D94;font-size:0.85em;margin-top:1.2em;margin-bottom:0.5em">
+  <i class="clock outline icon"></i>
+  Data through &mdash;
+  Revenue: <strong>{{ data_freshness.revenue|date:"m/d/Y"|default:"N/A" }}</strong>
+  &nbsp;&middot;&nbsp;
+  Google: <strong>{{ data_freshness.google|date:"m/d/Y"|default:"N/A" }}</strong>
+  &nbsp;&middot;&nbsp;
+  Bing: <strong>{{ data_freshness.bing|date:"m/d/Y"|default:"N/A" }}</strong>
+</div>
+{% endif %}
 
 <!-- ── Brand Focus JS ───────────────────────────────────────── -->
 <script>
@@ -225,6 +254,30 @@ function clearBrandFocus() {
   var input = document.getElementById('brand-focus-input');
   if (input) input.value = '';
   currentFocusBrandId = null;
+  var form = document.getElementById('filter-form');
+  if (form) htmx.trigger(form, 'submit');
+}
+
+var currentAlertFilter = '{{ alert_filter|default:"" }}';
+
+function toggleAlertFilter(key) {
+  var input = document.getElementById('alert-filter-input');
+  if (!input) return;
+  if (currentAlertFilter === key) {
+    input.value = '';
+    currentAlertFilter = '';
+  } else {
+    input.value = key;
+    currentAlertFilter = key;
+  }
+  var form = document.getElementById('filter-form');
+  if (form) htmx.trigger(form, 'submit');
+}
+
+function clearAlertFilter() {
+  var input = document.getElementById('alert-filter-input');
+  if (input) input.value = '';
+  currentAlertFilter = '';
   var form = document.getElementById('filter-form');
   if (form) htmx.trigger(form, 'submit');
 }

@@ -102,7 +102,19 @@ def index(request):
             if brand_q in r["name"].lower()
         ]
 
+    # Compute exception badges BEFORE alert filtering so counts stay stable
     exceptions = services.exceptions_summary(all_brand_rows)
+
+    # Alert filter — narrow table to brands matching a specific alert key
+    alert_filter = request.GET.get("alert", "").strip()
+    if alert_filter and alert_filter not in services.ALERT_META:
+        alert_filter = ""
+    alert_filter_label = ""
+    if alert_filter:
+        alert_filter_label = services.ALERT_META[alert_filter]["label"]
+        all_brand_rows = [
+            r for r in all_brand_rows if alert_filter in r["alerts"]
+        ]
     trend = services.daily_trend(
         period, vid, rev, preset=p["preset"], brand_id=bid,
     )
@@ -155,6 +167,9 @@ def index(request):
         "compare_start": period.compare.start,
         "compare_end": period.compare.end,
         "focused_brand": focused_brand,
+        "alert_filter": alert_filter,
+        "alert_filter_label": alert_filter_label,
+        "data_freshness": services.data_freshness(vid),
     }
 
     if request.headers.get("HX-Request"):
@@ -666,6 +681,139 @@ def export_pdf(request):
         f'attachment; filename="weekly-summary{slug}-{period.current.start}.pdf"'
     )
     return resp
+
+
+def export_overview_xlsx(request):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, numbers
+
+    p = _params(request)
+    period = p["period"]
+    vid = p["vertical_id"]
+    rev = p["rev_type"]
+    bid = p["brand_id"]
+
+    all_brand_rows = services.brand_table(period, vid, rev)
+
+    if bid:
+        all_brand_rows = [r for r in all_brand_rows if r["id"] == bid]
+
+    brand_q = (request.GET.get("brand_q") or "").strip().lower()
+    if brand_q:
+        all_brand_rows = [
+            r for r in all_brand_rows if brand_q in r["name"].lower()
+        ]
+
+    alert_filter = request.GET.get("alert", "").strip()
+    if alert_filter and alert_filter in services.ALERT_META:
+        all_brand_rows = [
+            r for r in all_brand_rows if alert_filter in r["alerts"]
+        ]
+
+    rev_label = {"net": "Net Rev", "new": "New Rev", "platform": "Plat Rev"}.get(rev, "Net Rev")
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Brand Performance"
+
+    headers = [
+        "Brand", "Vertical", "Spend", "Spend Δ",
+        rev_label, "Rev Δ", "MTS", "MTS Δ (bps)",
+        "Orders", "AOV", "Net CVR", "Mkt CVR",
+        "Rev Goal", "vs Goal", "MTS Goal", "vs Goal (bps)", "Status",
+    ]
+
+    header_fill = PatternFill(start_color="313E4F", end_color="313E4F", fill_type="solid")
+    header_font = Font(color="FFFFFF", bold=True, size=10)
+
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    pct_fmt = '0.0%'
+    dollar_fmt = '$#,##0'
+    mts_fmt = '0.0%'
+    int_fmt = '#,##0'
+
+    for row_idx, r in enumerate(all_brand_rows, 2):
+        ws.cell(row=row_idx, column=1, value=r["name"])
+        ws.cell(row=row_idx, column=2, value=r.get("vertical", ""))
+
+        c = ws.cell(row=row_idx, column=3, value=r.get("spend"))
+        c.number_format = dollar_fmt
+
+        c = ws.cell(row=row_idx, column=4, value=r.get("spend_delta"))
+        c.number_format = pct_fmt
+
+        c = ws.cell(row=row_idx, column=5, value=r.get("revenue"))
+        c.number_format = dollar_fmt
+
+        c = ws.cell(row=row_idx, column=6, value=r.get("revenue_delta"))
+        c.number_format = pct_fmt
+
+        c = ws.cell(row=row_idx, column=7, value=r.get("mts"))
+        c.number_format = mts_fmt
+
+        mts_d = r.get("mts_delta")
+        c = ws.cell(row=row_idx, column=8, value=round(mts_d * 10000) if mts_d is not None else None)
+
+        c = ws.cell(row=row_idx, column=9, value=r.get("orders"))
+        c.number_format = int_fmt
+
+        c = ws.cell(row=row_idx, column=10, value=r.get("aov"))
+        c.number_format = dollar_fmt
+
+        c = ws.cell(row=row_idx, column=11, value=r.get("net_cvr"))
+        c.number_format = mts_fmt
+
+        c = ws.cell(row=row_idx, column=12, value=r.get("mkt_cvr"))
+        c.number_format = mts_fmt
+
+        c = ws.cell(row=row_idx, column=13, value=r.get("revenue_budget"))
+        c.number_format = dollar_fmt
+
+        c = ws.cell(row=row_idx, column=14, value=r.get("revenue_vs_budget"))
+        c.number_format = pct_fmt
+
+        c = ws.cell(row=row_idx, column=15, value=r.get("mts_budget"))
+        c.number_format = mts_fmt
+
+        mts_vb = r.get("mts_vs_budget")
+        c = ws.cell(row=row_idx, column=16, value=round(mts_vb * 10000) if mts_vb is not None else None)
+
+        alerts = r.get("alerts", [])
+        status = ", ".join(
+            services.ALERT_META.get(a, {}).get("label", a) for a in alerts
+        ) if alerts else ""
+        ws.cell(row=row_idx, column=17, value=status)
+
+    # Auto-size columns
+    for col in ws.columns:
+        max_len = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            try:
+                if cell.value:
+                    max_len = max(max_len, len(str(cell.value)))
+            except Exception:
+                pass
+        ws.column_dimensions[col_letter].width = min(max_len + 3, 30)
+
+    vertical_name = ""
+    if vid:
+        vert = DimVertical.objects.filter(id=vid).first()
+        if vert:
+            vertical_name = f"-{vert.name.lower().replace(' ', '-')}"
+    filename = f"brand-performance{vertical_name}-{period.current.start}.xlsx"
+
+    response = HttpResponse(
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    wb.save(response)
+    return response
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -2586,6 +2734,7 @@ def weekly_report(request):
         "saved": saved,
         "last_saved": last_saved,
         "brand_notes_json": brand_notes_json,
+        "data_freshness": services.data_freshness(vertical_id),
     }
     return render(request, "dashboard/weekly_report.html", ctx)
 

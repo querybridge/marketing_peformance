@@ -55,7 +55,7 @@ def build_promo_report_docx(
     # ── Performance by MFG ───────────────────────────────────────
     doc.add_heading("Performance by MFG", level=2)
 
-    cols = ["Brand", "Rev YoY%", "Spend YoY%", "MTS", "Status", "Notes"]
+    cols = ["Brand", "Revenue", "Cmp Rev", "Rev YoY%", "Spend", "Cmp Spend", "Spend YoY%", "MTS", "Status", "Notes"]
     t2 = doc.add_table(rows=1 + len(brand_rows), cols=len(cols), style="Light Grid Accent 1")
     t2.alignment = WD_TABLE_ALIGNMENT.LEFT
 
@@ -65,13 +65,17 @@ def build_promo_report_docx(
     brand_notes = report.brand_notes if report else {}
     for i, row in enumerate(brand_rows, start=1):
         _set_cell_text(t2.cell(i, 0), row["name"], bold=True, size=8)
-        _set_cell_text(t2.cell(i, 1), _fmt_pct(row["rev_yoy_pct"]), size=8)
-        _set_cell_text(t2.cell(i, 2), _fmt_pct(row["spend_yoy_pct"]), size=8)
-        _set_cell_text(t2.cell(i, 3), _fmt_mts(row["mts"]), size=8)
+        _set_cell_text(t2.cell(i, 1), _fmt_dollar(row["revenue"]), size=8)
+        _set_cell_text(t2.cell(i, 2), _fmt_dollar(row["revenue_cmp"]), size=8)
+        _set_cell_text(t2.cell(i, 3), _fmt_pct(row["rev_yoy_pct"]), size=8)
+        _set_cell_text(t2.cell(i, 4), _fmt_dollar(row["spend"]), size=8)
+        _set_cell_text(t2.cell(i, 5), _fmt_dollar(row["spend_cmp"]), size=8)
+        _set_cell_text(t2.cell(i, 6), _fmt_pct(row["spend_yoy_pct"]), size=8)
+        _set_cell_text(t2.cell(i, 7), _fmt_mts(row["mts"]), size=8)
         status = ", ".join(b["label"] for b in row["alert_badges"]) or "—"
-        _set_cell_text(t2.cell(i, 4), status, size=8)
+        _set_cell_text(t2.cell(i, 8), status, size=8)
         note = brand_notes.get(str(row["id"]), "")
-        _set_cell_text(t2.cell(i, 5), note, size=8)
+        _set_cell_text(t2.cell(i, 9), note, size=8)
 
     # ── Commentary sections ──────────────────────────────────────
     sections = [

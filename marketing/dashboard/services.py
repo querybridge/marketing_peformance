@@ -929,6 +929,44 @@ def drill_table(period, group_by, rev_type="net", **filters):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# DATA FRESHNESS
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def data_freshness(vertical_id=None):
+    """Return the latest date with data for Revenue, Google Ads, and Bing Ads.
+
+    Returns a dict like::
+
+        {"revenue": date|None, "google": date|None, "bing": date|None}
+    """
+    rev_qs = FactOrdersDaily.objects.all()
+    if vertical_id:
+        rev_qs = rev_qs.filter(brand__vertical_id=vertical_id)
+    latest_revenue = (
+        rev_qs.order_by("-date__date")
+        .values_list("date__date", flat=True)
+        .first()
+    )
+
+    def _latest_media(source_name):
+        qs = FactMediaDaily.objects.filter(campaign__source__name=source_name)
+        if vertical_id:
+            qs = qs.filter(campaign__brand__vertical_id=vertical_id)
+        return (
+            qs.order_by("-date__date")
+            .values_list("date__date", flat=True)
+            .first()
+        )
+
+    return {
+        "revenue": latest_revenue,
+        "google": _latest_media("Google Ads"),
+        "bing": _latest_media("Bing Ads"),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # TREND DATA  (for Google Charts)
 # ═══════════════════════════════════════════════════════════════════════════
 

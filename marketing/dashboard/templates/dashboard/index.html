@@ -10,7 +10,7 @@
 
       <div class="field">
         <label>Vertical</label>
-        <select name="vertical" class="ui dropdown auto-filter" onchange="var bi=document.getElementById('brand-focus-input');if(bi)bi.value='';">
+        <select name="vertical" class="ui dropdown auto-filter" onchange="var bi=document.getElementById('brand-focus-input');if(bi)bi.value='';var ai=document.getElementById('alert-filter-input');if(ai)ai.value='';">
           <option value="">All Verticals</option>
           {% for v in verticals %}
           <option value="{{ v.id }}" {% if v.id == vertical_id %}selected{% endif %}>{{ v.name }}</option>
@@ -55,6 +55,8 @@
 
     <!-- Brand focus (set via JS toggleBrandFocus) -->
     <input type="hidden" name="brand" id="brand-focus-input" value="{{ brand_id|default:'' }}">
+    <!-- Alert filter (set via JS toggleAlertFilter) -->
+    <input type="hidden" name="alert" id="alert-filter-input" value="{{ alert_filter|default:'' }}">
   </div>
 </form>
 

@@ -277,6 +277,18 @@
 
 </form>
 
+{% if data_freshness %}
+<div style="text-align:center;color:#6B7D94;font-size:0.85em;margin-top:1.2em;margin-bottom:0.5em">
+  <i class="clock outline icon"></i>
+  Data through &mdash;
+  Revenue: <strong>{{ data_freshness.revenue|date:"m/d/Y"|default:"N/A" }}</strong>
+  &nbsp;&middot;&nbsp;
+  Google: <strong>{{ data_freshness.google|date:"m/d/Y"|default:"N/A" }}</strong>
+  &nbsp;&middot;&nbsp;
+  Bing: <strong>{{ data_freshness.bing|date:"m/d/Y"|default:"N/A" }}</strong>
+</div>
+{% endif %}
+
 {% elif not selected_vertical %}
 <div class="ui message">
   <i class="info circle icon"></i> Select a vertical and click Load to generate a weekly report.

@@ -300,7 +300,11 @@
     <thead>
       <tr>
         <th>Brand (MFG)</th>
+        <th class="right aligned">Revenue</th>
+        <th class="right aligned">Cmp Revenue</th>
         <th class="right aligned">Rev YoY %</th>
+        <th class="right aligned">Spend</th>
+        <th class="right aligned">Cmp Spend</th>
         <th class="right aligned">Spend YoY %</th>
         <th class="right aligned">MTS</th>
         <th>Status</th>
@@ -311,7 +315,11 @@
       {% for row in report_data.brand_rows %}
       <tr>
         <td><strong>{{ row.name }}</strong></td>
-        <td class="right aligned">{% if row.rev_yoy_pct != None %}{{ row.rev_yoy_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+        <td class="right aligned">${{ row.revenue|floatformat:0|intcomma }}</td>
+        <td class="right aligned">${{ row.revenue_cmp|floatformat:0|intcomma }}</td>
+        <td class="right aligned">{% if row.rev_yoy_pct != None %}<span style="{% if row.rev_yoy_pct > 10 %}color:#21ba45{% elif row.rev_yoy_pct < -10 %}color:#db2828{% endif %}">{{ row.rev_yoy_pct|floatformat:1 }}%</span>{% else %}&mdash;{% endif %}</td>
+        <td class="right aligned">${{ row.spend|floatformat:0|intcomma }}</td>
+        <td class="right aligned">${{ row.spend_cmp|floatformat:0|intcomma }}</td>
         <td class="right aligned">{% if row.spend_yoy_pct != None %}{{ row.spend_yoy_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
         <td class="right aligned">{% if row.mts_pct != None %}{{ row.mts_pct|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
         <td>

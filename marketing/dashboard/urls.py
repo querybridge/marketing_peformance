@@ -25,6 +25,7 @@ urlpatterns = [
     path("alert-spec/", views.alert_spec, name="alert_spec"),
     path("budgets/", views.budgets, name="budgets"),
     path("export/pdf/", views.export_pdf, name="export_pdf"),
+    path("export/overview/", views.export_overview_xlsx, name="export_overview_xlsx"),
     path("verticals/", views.verticals, name="verticals"),
     path("brands/", views.brands, name="brands"),
     path("upload/", views.upload_csv, name="upload_csv"),
