@@ -1842,6 +1842,38 @@ def upload_csv(request):
                 "_max_impr": impressions,
             }
 
+    # ── Skip campaign-level rows that would duplicate existing ad-group data ──
+    skipped_has_ag = 0
+    if not has_ad_group_col:
+        camp_date_keys = {
+            (agg["campaign"].id, agg["date"].id) for agg in pending_rows.values()
+        }
+        if camp_date_keys:
+            from django.db.models import Q
+
+            existing_ag = set()
+            keys_list = list(camp_date_keys)
+            CHUNK = 500
+            for i in range(0, len(keys_list), CHUNK):
+                q = Q()
+                for cid, did in keys_list[i : i + CHUNK]:
+                    q |= Q(campaign_id=cid, date_id=did)
+                existing_ag.update(
+                    FactMediaDaily.objects.filter(q)
+                    .exclude(ad_group_name="")
+                    .values_list("campaign_id", "date_id")
+                    .distinct()
+                )
+            if existing_ag:
+                keys_to_drop = [
+                    k
+                    for k, agg in pending_rows.items()
+                    if (agg["campaign"].id, agg["date"].id) in existing_ag
+                ]
+                for k in keys_to_drop:
+                    del pending_rows[k]
+                skipped_has_ag = len(keys_to_drop)
+
     # ── Write aggregated rows to DB ──────────────────────────────────
     for agg in pending_rows.values():
         _, is_created = FactMediaDaily.objects.update_or_create(
@@ -1887,6 +1919,7 @@ def upload_csv(request):
         "metadata_rows_skipped": metadata_rows_skipped,
         "has_ad_group_col": has_ad_group_col,
         "ad_group_rows": ad_group_rows,
+        "skipped_has_ag": skipped_has_ag,
     }
     return render(request, "dashboard/upload.html", ctx)
 

@@ -119,7 +119,12 @@
       {% if summary.has_ad_group_col %}
       <p><i class="check circle icon" style="color:green"></i> Ad Group column detected: {{ summary.ad_group_rows }} ad-group-level rows stored.</p>
       {% else %}
-      <p><i class="exclamation triangle icon" style="color:orange"></i> No Ad Group column found in CSV. Drill-down will show "—" for Ad Group. Include an "Ad group" column to enable per-ad-group metrics.</p>
+      <p><i class="info circle icon"></i> No Ad Group column — campaign-level rows stored. Rows with existing ad-group-level data were skipped to prevent double-counting.</p>
+      {% endif %}
+      {% if summary.skipped_has_ag %}
+      <p><i class="check circle icon" style="color:green"></i>
+         Skipped {{ summary.skipped_has_ag }} campaign-level row{{ summary.skipped_has_ag|pluralize }}
+         — ad-group-level data already exists for those campaigns/dates.</p>
       {% endif %}
     </div>
 
