@@ -84,15 +84,17 @@ def resolve_optimization_period(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def compute_elasticity(campaign_id: int, window: DateWindow) -> float:
+def compute_elasticity(campaign_id: int, window: DateWindow, ad_group_name: str = None) -> float:
     """Log-log regression of daily spend vs clicks. Returns 0.0-1.0."""
+    qs = FactMediaDaily.objects.filter(
+        campaign_id=campaign_id,
+        date__date__gte=window.start,
+        date__date__lte=window.end,
+    )
+    if ad_group_name is not None:
+        qs = qs.filter(ad_group_name=ad_group_name)
     rows = (
-        FactMediaDaily.objects.filter(
-            campaign_id=campaign_id,
-            date__date__gte=window.start,
-            date__date__lte=window.end,
-        )
-        .values("date__date")
+        qs.values("date__date")
         .annotate(
             spend=Coalesce(Sum("cost"), _Z, output_field=_DF),
             clicks=Coalesce(Sum("clicks"), 0),
@@ -165,19 +167,22 @@ def compute_efficiency_stability(
     window: DateWindow,
     peer_roas_cv: float,
     peer_cvr_cv: float,
+    ad_group_name: str = None,
 ) -> float:
     """Weekly ROAS and CVR coefficient of variation, shrunk toward peer group.
 
     Lower CV = more stable = higher score. Returns 0.0-1.0.
     """
     # Get weekly aggregates within the window
+    qs = FactMediaDaily.objects.filter(
+        campaign_id=campaign_id,
+        date__date__gte=window.start,
+        date__date__lte=window.end,
+    )
+    if ad_group_name is not None:
+        qs = qs.filter(ad_group_name=ad_group_name)
     rows = (
-        FactMediaDaily.objects.filter(
-            campaign_id=campaign_id,
-            date__date__gte=window.start,
-            date__date__lte=window.end,
-        )
-        .values("date__year_week")
+        qs.values("date__year_week")
         .annotate(
             spend=Coalesce(Sum("cost"), _Z, output_field=_DF),
             clicks=Coalesce(Sum("clicks"), 0),
@@ -542,7 +547,7 @@ def build_optimization_table(
 
     campaign_ids = [c.id for c in campaigns]
 
-    # 2. Bulk query — analysis period aggregates per campaign
+    # 2. Bulk query — analysis period aggregates per (campaign, ad_group)
     analysis_agg = {}
     qs = (
         FactMediaDaily.objects.filter(
@@ -550,7 +555,7 @@ def build_optimization_table(
             date__date__gte=period.analysis.start,
             date__date__lte=period.analysis.end,
         )
-        .values("campaign_id")
+        .values("campaign_id", "ad_group_name")
         .annotate(
             spend=Coalesce(Sum("cost"), _Z, output_field=_DF),
             clicks=Coalesce(Sum("clicks"), 0),
@@ -559,7 +564,7 @@ def build_optimization_table(
         )
     )
     for r in qs:
-        analysis_agg[r["campaign_id"]] = r
+        analysis_agg[(r["campaign_id"], r["ad_group_name"])] = r
 
     # Vertical-level spend totals for budget binding
     vert_spend_qs = FactMediaDaily.objects.filter(
@@ -583,11 +588,11 @@ def build_optimization_table(
         mts = float(vert_budget.mts_budget)
         vert_budget_spend = rev * mts
 
-    # LY aggregates (52-week offset)
+    # LY aggregates (52-week offset) — campaign-level for budget binding
     ly_start = period.analysis.start - timedelta(weeks=52)
     ly_end = period.analysis.end - timedelta(weeks=52)
-    ly_agg = {}
-    ly_qs = (
+    ly_camp_agg = {}
+    ly_camp_qs = (
         FactMediaDaily.objects.filter(
             campaign_id__in=campaign_ids,
             date__date__gte=ly_start,
@@ -598,8 +603,8 @@ def build_optimization_table(
             spend=Coalesce(Sum("cost"), _Z, output_field=_DF),
         )
     )
-    for r in ly_qs:
-        ly_agg[r["campaign_id"]] = float(r["spend"])
+    for r in ly_camp_qs:
+        ly_camp_agg[r["campaign_id"]] = float(r["spend"])
 
     ly_vert_qs = FactMediaDaily.objects.filter(
         campaign__brand__vertical_id=vertical_id,
@@ -609,6 +614,21 @@ def build_optimization_table(
         total_spend=Coalesce(Sum("cost"), _Z, output_field=_DF),
     )
     ly_vert_spend = float(ly_vert_qs["total_spend"])
+
+    # Pre-compute campaign-level spend totals and budget binding
+    camp_total_spend = {}
+    for (cid, _), agg in analysis_agg.items():
+        camp_total_spend[cid] = camp_total_spend.get(cid, 0.0) + float(agg.get("spend", 0))
+
+    camp_by_id = {c.id: c for c in campaigns}
+    camp_budget_binding = {}
+    for camp in campaigns:
+        ly_spend = ly_camp_agg.get(camp.id, 0.0)
+        camp_budget_binding[camp.id] = compute_budget_binding(
+            camp_total_spend.get(camp.id, 0.0),
+            vert_total_spend, vert_budget_spend,
+            ly_spend, ly_vert_spend,
+        )
 
     # Vertical revenue pacing for recommendations
     vertical_revenue_pace = None
@@ -641,48 +661,52 @@ def build_optimization_table(
             )
         return peer_cache[key]
 
-    # 4. Per-campaign scoring
+    # 4. Per ad-group scoring
     results = []
-    for camp in campaigns:
-        agg = analysis_agg.get(camp.id, {})
-        camp_spend = float(agg.get("spend", 0))
-        camp_clicks = agg.get("clicks", 0)
-        camp_conversions = agg.get("conversions", 0)
-        camp_conv_value = float(agg.get("conv_value", 0))
+    for (cid, ag_name) in analysis_agg:
+        camp = camp_by_id.get(cid)
+        if not camp:
+            continue
 
-        camp_roas = camp_conv_value / camp_spend if camp_spend > 0 else None
-        camp_mts = camp_spend / camp_conv_value if camp_conv_value > 0 else None
-        camp_cvr = camp_conversions / camp_clicks if camp_clicks > 0 else None
+        agg = analysis_agg[(cid, ag_name)]
+        ag_spend = float(agg.get("spend", 0))
+        ag_clicks = agg.get("clicks", 0)
+        ag_conversions = agg.get("conversions", 0)
+        ag_conv_value = float(agg.get("conv_value", 0))
+
+        ag_roas = ag_conv_value / ag_spend if ag_spend > 0 else None
+        ag_mts = ag_spend / ag_conv_value if ag_conv_value > 0 else None
+        ag_cvr = ag_conversions / ag_clicks if ag_clicks > 0 else None
 
         peer = _get_peer(camp.source_id, camp.campaign_type_id)
 
-        # CVR baseline: use campaign CVR if sufficient clicks, otherwise peer
+        # CVR baseline: use ad-group CVR if sufficient clicks, otherwise peer
         used_peer_cvr = False
-        if camp_clicks < config.min_click_threshold:
+        if ag_clicks < config.min_click_threshold:
             cvr_baseline = peer["peer_cvr"]
             used_peer_cvr = True
         else:
-            cvr_baseline = camp_cvr or 0.0
+            cvr_baseline = ag_cvr or 0.0
 
         # Inclusion filter
-        passes, expected_conv = passes_inclusion(camp_clicks, cvr_baseline)
+        passes, expected_conv = passes_inclusion(ag_clicks, cvr_baseline)
         if not passes:
             continue
 
-        # Component A: Elasticity
-        comp_a = compute_elasticity(camp.id, period.elasticity)
+        # ad_group filter: None for PMax (""), actual name for real ad groups
+        ag_filter = ag_name if ag_name else None
 
-        # Component B: Budget Binding
-        ly_camp_spend = ly_agg.get(camp.id, 0.0)
-        comp_b = compute_budget_binding(
-            camp_spend, vert_total_spend, vert_budget_spend,
-            ly_camp_spend, ly_vert_spend,
-        )
+        # Component A: Elasticity
+        comp_a = compute_elasticity(camp.id, period.elasticity, ad_group_name=ag_filter)
+
+        # Component B: Budget Binding (campaign-level)
+        comp_b = camp_budget_binding[camp.id]
 
         # Component C: Efficiency Stability
         comp_c = compute_efficiency_stability(
             camp.id, period.efficiency,
             peer["peer_roas_cv"], peer["peer_cvr_cv"],
+            ad_group_name=ag_filter,
         )
 
         # Weighted score
@@ -696,8 +720,8 @@ def build_optimization_table(
         # Recommendation
         action, detail, magnitude, reason_codes = recommend_action(
             scalability_score=scalability_score,
-            roas=camp_roas,
-            source_cvr=camp_cvr,
+            roas=ag_roas,
+            source_cvr=ag_cvr,
             efficiency_conversions=expected_conv,
             vertical_revenue_pace=vertical_revenue_pace,
             vertical_mts_pace=vertical_mts_pace,
@@ -709,18 +733,18 @@ def build_optimization_table(
         results.append(CampaignScore(
             campaign_id=camp.id,
             campaign_name=camp.name,
-            ad_group_name=camp.ad_group_name,
+            ad_group_name=ag_name,
             source_name=camp.source.name,
             campaign_type_name=camp.campaign_type.name,
             brand_name=camp.brand.name,
             brand_id=camp.brand.id,
-            spend=camp_spend,
-            clicks=camp_clicks,
-            conversions=camp_conversions,
-            conv_value=camp_conv_value,
-            roas=camp_roas,
-            mts=round(camp_mts, 4) if camp_mts is not None else None,
-            source_cvr=camp_cvr,
+            spend=ag_spend,
+            clicks=ag_clicks,
+            conversions=ag_conversions,
+            conv_value=ag_conv_value,
+            roas=ag_roas,
+            mts=round(ag_mts, 4) if ag_mts is not None else None,
+            source_cvr=ag_cvr,
             scalability_score=scalability_score,
             comp_a=round(comp_a, 3),
             comp_b=round(comp_b, 3),
